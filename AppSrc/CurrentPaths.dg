@@ -1,0 +1,87 @@
+Use Windows.pkg
+Use Dfabout.pkg
+
+Object oCurrentPaths is a ModalPanel
+    Set Size to 123 271
+    Set Label to "Current Data Paths"
+    Set piMinSize to 89 211
+    Set Location to 2 2
+    Set Border_Style To Border_Thick
+
+    Object oCancel_Btn is a Button
+        Set Label to "Close"
+        Set Location to 103 213
+        Set peAnchors to anBottomRight
+
+        Procedure OnClick
+            Send Close_Panel
+        End_Procedure
+
+    End_Object
+
+    Object oDriverInfo_btn is a Button
+        Set Location to 103 72
+//        Set Location to 24 287
+        Set Label to "Version Info"
+        Set Status_Help to "Shows a dialog with driver properties and SQL client software version(s), license info and more."
+        Set peAnchors to anBottomLeft
+
+        Procedure OnClick
+            Object oSysInfoDialog is a SysInfoDialog
+            End_Object
+
+            Send Popup of oSysInfoDialog
+        End_Procedure
+    End_Object
+
+    Object oDataPath_fm is a Form
+        Set Size to 12 189
+        Set Location to 18 72
+        Set Label_Col_Offset to 2
+        Set Label_Justification_Mode to JMode_Right
+        Set Label to "Data Path:"
+        Set peAnchors to anTopLeftRight
+        Set Entry_State to False
+    End_Object
+
+    Object oFileListPath_fm is a Form
+        Set Size to 12 189
+        Set Location to 33 72
+        Set Label_Col_Offset to 2
+        Set Label_Justification_Mode to JMode_Right
+        Set Label to "FileList Path:"
+        Set peAnchors to anTopLeftRight
+        Set Entry_State to False
+    End_Object
+
+    Object oDFPath_fm is a cTextEdit
+        Set Size to 49 189
+        Set Location to 49 72
+        Set Label_Col_Offset to 2
+        Set Label_Justification_Mode to JMode_Right
+        Set Label to "DFPath:"
+        Set peAnchors to anAll
+        Set Read_Only_State to True
+    End_Object
+
+    Procedure Popup
+        String sDataPath sFileListPath sDFPath
+
+        Get psDataPath of (phoWorkspace(ghoApplication)) to sDataPath
+        Set Value of oDataPath_fm to sDataPath
+        Get psFileList of (phoWorkspace(ghoApplication)) to sFileListPath
+        Set Value of oFileListPath_fm to sFileListPath
+        Get psDfPath   of (phoWorkspace(ghoApplication)) to sDFPath
+        Set Value of oDFPath_fm to sDFPath
+
+        Forward Send Popup
+    End_Procedure
+
+    Procedure Page Integer iPageObject
+        Set Icon to "DFSSetupDataFolders.ico"
+        Forward Send Page iPageObject
+    End_Procedure
+
+    On_Key Key_Alt+Key_C Send KeyAction of oCancel_Btn
+    On_Key kCancel       Send KeyAction of oCancel_Btn
+End_Object

@@ -1,0 +1,564 @@
+﻿//****************************************************************************
+// $Module type: Package
+// $Module name: cDataFolderSelector.pkg
+// $Author     : Nils Svedmyr, RDC Tools International, <mailto:support@rdctools.com>
+// Web-site    : http://www.rdctools.com
+// Created     : 2019-10-27 @ 09:33 (Military date format: YY-MM-DD)
+//
+// Purpose     : A utility for adding Data folders to an ini-file
+//               (DataFolderSelector.ini)
+//
+// See Also    : Check out the SetupDataFolders.chm help file in the Help folder.
+//
+//
+// Note 1      : This package creates an instance of the cDataFolderSelector class
+//               at the bottom of the package. It can be communicated to, with the
+//               ghoDataFolderSelector global object handle.
+//
+// Note 2      : You *do* want to change the default values for the properties: 
+//               "String psHashString" and "String psAppDefaultPw" below.
+
+// Constant and external_function declarations;
+Use cDataFolderSelector.inc
+
+Class cDataFolderSelector is a cIniFile
+
+    Procedure Construct_Object
+        String sPath sIniFileName sDirSep
+
+        Forward Send Construct_Object     
+        
+        Property Integer piSuggestionListMaxItems 50 // Max number of Data folders
+        Property Boolean pbAutoPopup False //True
+        // If this property is False, instead of saving & restoring opened tables,
+        // all tables in the Filelist.cfg will be re-opened after the change of
+        // psDataPath and Filelist.cfg settings. However, no Master/Alias settings
+        // can or will be done.
+        Property Boolean pbAutoRestoreOpenFiles True
+        Property tDFSMasterAlias[] paMasterAlias
+
+        { Visibility=Private }
+        // *** You *do* want to change this property! ***
+        // Beware though to only change it in one place (!) Here is probably safest.
+        Property String psHashString "1E345F18-FC3B-492D-B22D-E18ABBDC7BE9"
+        // Default password used by the SetupDataFolders.src program, if no
+        // password has been set with the "Configure/Password" dialog.
+        // Note: This is only used so someone simply can't just delete a pw
+        // from the ini-file and run your program with a password protected Data folder.
+        // It is only used iif (If-and-only-If) an explicit password has _not_ been set.
+        // Not perfect but at least a little bit better.
+        
+        // You probably also want to change the default password to something else...
+        // In short; this password has to be entered when the program is started,
+        // if the password has been deleted from the ini-file.
+        Property String psAppDefaultPw "john" // Tribute to John Tuohy(!)
+
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        // The ini-file name should reside in the workspace Programs folder;
+        Get DFSGetApplicationPath to sPath
+        Get AddFolderDelimiter sPath to sPath
+        Move CS_DFSIniFileName to sIniFileName
+        Set psFileName to (sPath + sIniFileName)
+    End_Procedure
+
+    Procedure End_Construct_Object
+        Forward Send End_Construct_Object
+    End_Procedure   
+    
+    Function ReadString String sSection String sKey String sDefault Returns String
+        String sRetval sIniFile        
+        Boolean bExists
+        Get psFileName to sIniFile
+        If (sIniFile = "") Begin
+            Function_Return ""
+        End
+        Forward Get ReadString sSection sKey sDefault to sRetval
+        Function_Return sRetval
+    End_Function
+    
+    Function LastUsedDataFolder Returns String
+        String sSelectedDataFolder         
+        Get ReadString CS_DFSSettings CS_DFSLastUsedDataFolder "Data" to sSelectedDataFolder
+        Move (Trim(sSelectedDataFolder)) to sSelectedDataFolder
+        Function_Return sSelectedDataFolder
+    End_Function
+    
+    // Add one or more Data folders to the ini-file.
+    Function AddFoldersToIniFile tDFSDataFolders[] aDataFolders Returns Boolean
+        Boolean bOK
+        Integer iSize iCount iItem
+        tDFSDataFolders[] aCurrentDataFolders
+        
+        Get ReadDataFoldersFromIniFile to aCurrentDataFolders
+        Move (SizeOfArray(aCurrentDataFolders)) to iItem
+        
+        Move (SizeOfArray(aDataFolders)) to iSize
+        Decrement iSize  
+        
+        For iCount from 0 to iSize
+            Move aDataFolders[iCount].bActive      to aCurrentDataFolders[iItem].bActive
+            Move aDataFolders[iCount].bSelected    to aCurrentDataFolders[iItem].bSelected
+            Move aDataFolders[iCount].sDataFolder  to aCurrentDataFolders[iItem].sDataFolder
+            Move aDataFolders[iCount].sDescription to aCurrentDataFolders[iItem].sDescription
+            Move aDataFolders[iCount].sPassword    to aCurrentDataFolders[iItem].sPassword
+            Increment iItem
+        Loop
+        
+        Get WriteDataFoldersToIniFile aCurrentDataFolders to bOK
+        
+        Function_Return bOK
+    End_Function
+
+    Function ReadDataFoldersFromIniFile Returns tDFSDataFolders[]
+        tDFSDataFolders[] aDataFolders
+        String sValue sAppDefaultPw sEmptyPw sSelectedDataFolder sDataFolder
+        Integer iSize iCount iItem
+        Boolean bExists bIsValid
+
+        Get psAppDefaultPw to sAppDefaultPw
+        Get piSuggestionListMaxItems to iSize
+        Move 0 to iItem
+
+        Get ReadString CS_DFSSettings CS_DFSLastUsedDataFolder "Data" to sSelectedDataFolder
+        Move (Trim(sSelectedDataFolder)) to sSelectedDataFolder
+
+        For iCount from 0 to iSize
+            Get SectionExists (CS_DFSIniFileDataGroup + String(iCount)) to bExists
+            If (bExists = True) Begin
+                Get ReadString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFileDataFolderName "" to aDataFolders[iCount].sDataFolder
+                Move aDataFolders[iCount].sDataFolder to sDataFolder
+                If (Lowercase(sDataFolder) = Lowercase(sSelectedDataFolder)) Begin
+                    Move True to aDataFolders[iCount].bSelected
+                End                                                 
+                Get IsDataFolderValid sDataFolder to bIsValid
+                Move bIsValid to aDataFolders[iCount].bIsValid
+                Get ReadString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFileDescription    "" to aDataFolders[iCount].sDescription
+                Get ReadString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFilePassword       "" to sValue
+                Move (sAppDefaultPw + String(iCount)) to sEmptyPw
+                Get DecryptPassword sValue to sValue
+                If (sValue <> sEmptyPw) Begin
+                    Move sValue to aDataFolders[iCount].sPassword
+                End
+                Get ReadString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFileActive         "" to aDataFolders[iCount].bActive
+            End
+        Loop
+
+        Function_Return aDataFolders
+    End_Function
+
+    Function WriteDataFoldersToIniFile tDFSDataFolders[] aDataFolders Returns Boolean
+        Integer iSize iCount
+        Boolean bOK bErrOrg
+        String sValue sAppDefaultPw sSelectedDataFolder
+
+        // We do this to preserve the current state of the err (system) flag.
+        Move Err to bErrOrg
+        Move False to Err
+        Get DeleteAllData to bOK
+        Get psAppDefaultPw to sAppDefaultPw
+
+        Move (SizeOfArray(aDataFolders)) to iSize
+        Decrement iSize
+
+        For iCount from 0 to iSize
+            Send WriteString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFileDataFolderName aDataFolders[iCount].sDataFolder
+            Send WriteString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFileDescription    aDataFolders[iCount].sDescription
+            Move aDataFolders[iCount].sPassword to sValue
+            If (sValue = "") Begin
+                Move (sAppDefaultPw + String(iCount)) to sValue
+            End
+            Get EncryptPassword sValue to sValue
+            Send WriteString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFilePassword sValue
+            Send WriteString (CS_DFSIniFileDataGroup + String(iCount)) CS_DFSIniFileActive   aDataFolders[iCount].bActive
+            If (aDataFolders[iCount].bSelected = True) Begin
+                Move aDataFolders[iCount].sDataFolder to sSelectedDataFolder
+            End
+        Loop
+        
+        If (Trim(sSelectedDataFolder) = "") Begin
+            Move CS_DFSIniFileDataFolderName to sSelectedDataFolder
+        End
+        Send WriteString CS_DFSSettings CS_DFSLastUsedDataFolder sSelectedDataFolder
+        Move (Err = False) to bOK
+        Move bErrOrg to Err
+
+        Function_Return bOK
+    End_Function
+
+    Function EncryptPassword String sPassword Returns String
+        String sRetval
+#IF (!@ > 190)
+        Handle hoLoginEncryption
+
+        Get Create (RefClass(cLoginEncryption)) to hoLoginEncryption
+        Set psEncryptPassword of hoLoginEncryption to (psHashString(Self))
+        Get EncryptPassword of hoLoginEncryption sPassword to sRetval
+        Send Destroy of hoLoginEncryption
+#ELSE
+        // Use Base64 if DF 18.2 or earlier
+        // Important! This is no encryption, it is "base64 encoding" !!!
+        Get EncodeString of oBase64Functions sPassword to sRetval
+#ENDIF
+
+        Function_Return sRetval
+    End_Function
+
+    Function DecryptPassword String sPassword Returns String
+        String sRetval
+#IF (!@ > 190)
+        Handle hoLoginEncryption
+
+        Get Create (RefClass(cLoginEncryption)) to hoLoginEncryption
+        Set psEncryptPassword of hoLoginEncryption to (psHashString(Self))
+        Get DecryptPassword of hoLoginEncryption sPassword to sRetval
+        Send Destroy of hoLoginEncryption
+#ELSE
+        Get DecodeString of oBase64Functions sPassword to sRetval
+#ENDIF
+
+        Function_Return sRetval
+    End_Function
+
+    Function DeleteAllData Returns Boolean
+        Integer iCount
+        Boolean bExists
+
+        Move False to Err
+        Move 0 to iCount
+        Get SectionExists (CS_DFSIniFileDataGroup + String(iCount)) to bExists
+        While (bExists = True)
+            Send DeleteSection (CS_DFSIniFileDataGroup + String(iCount))
+            Increment iCount
+            Get SectionExists (CS_DFSIniFileDataGroup + String(iCount)) to bExists
+        Loop
+        Function_Return (Err = False)
+    End_Function
+
+    Function ReadWorkspaceFolders Returns tDFSDataFolders[]
+        tDFSDataFolders[] aDataFolders
+        String[] asWSDataFolders
+        Integer iSize iCount 
+        
+        Get WorkspaceDataFolders to asWSDataFolders
+        Move (SizeOfArray(asWSDataFolders)) to iSize
+        Decrement iSize
+        For iCount from 0 to iSize
+            Move asWSDataFolders[iCount] to aDataFolders[iCount].sDataFolder
+            Move True                    to aDataFolders[iCount].bActive
+            Move ""                      to aDataFolders[iCount].sPassword
+        Loop
+
+        Function_Return aDataFolders
+    End_Function
+
+    Function AddFolderDelimiter String sPath Returns String
+        String sDirSep
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        Move (Trim(sPath)) to sPath
+        If (Right(sPath, 1) <> sDirSep) Begin
+            Move (sPath + sDirSep) to sPath
+        End
+        Function_Return sPath
+    End_Function  
+    
+    Function QualifiedDataPath String sFolder Returns String
+        String sFullPath sHomePath  
+        Boolean bRelativePath  
+        
+        Move (not(sFolder contains ":")) to bRelativePath
+        If (bRelativePath = True) Begin
+            Move (not(Left(sFolder, 2) = "\\")) to bRelativePath
+        End
+        If (bRelativePath = True) Begin
+            Get DFSGetApplicationPath to sHomePath
+            Get ExtractFilePath sHomePath to sHomePath
+            Get AddFolderDelimiter sHomePath to sHomePath
+            Move (sHomePath + sFolder) to sFullPath
+        End
+        Else Begin
+            Move sFolder to sFullPath
+        End
+        
+        Function_Return sFullPath
+    End_Function
+
+    Function IsFolder String sPath Returns Boolean
+        Integer iAttributes
+        Boolean bIsDirectory
+
+        Move (GetFileAttributes(sPath)) to iAttributes
+        If (iAttributes <> -1) Begin
+            Move (IsFlagIn(FILE_ATTRIBUTE_DIRECTORY, iAttributes)) to bIsDirectory
+        End
+        Else Begin
+            Move False to bIsDirectory
+        End
+
+        Function_Return bIsDirectory
+    End_Function   
+    
+    // Three checks for the passed Data folder will be performed;
+    // 1) Is it a valid folder name?
+    // 2) Does the folder name exists?
+    // 3) Does the folder contain a Filelist.cfg file?
+    Function IsDataFolderValid String sFolder Returns Boolean
+        Boolean bOK
+        String sFileList
+        
+        Get QualifiedDataPath sFolder to sFolder
+        Get IsFolder sFolder to bOK
+        If (bOK = True) Begin
+            File_Exist sFolder bOK
+        End                                 
+        If (bOK = True) Begin    
+            Get AddFolderDelimiter sFolder to sFolder
+            Move (sFolder + "\Filelist.cfg") to sFileList
+            File_Exist sFileList bOK    
+        End
+        
+        Function_Return bOK
+    End_Function 
+    
+    Function NumberOfDataFolders Returns Integer
+        tDFSDataFolders[] DFSDataFolders
+        Get ReadDataFoldersFromIniFile to DFSDataFolders
+        Function_Return (SizeOfArray(DFSDataFolders))
+    End_Function
+    
+    // Returns the ini-file's first valid data folder.
+    // Valid means it exists and contains a filelist.cfg file.
+    Function FirstValidFolder Returns String
+        tDFSDataFolders[] aDataFolders
+        Integer iSize iCount
+        String sFolder
+        Boolean bIsValid
+        
+        Move "" to sFolder
+        Get ReadDataFoldersFromIniFile to aDataFolders
+        Move (SizeOfArray(aDataFolders)) to iSize
+        Decrement iSize
+        For iCount from 0 to iSize
+            Move aDataFolders[iCount].sDataFolder to sFolder
+            Get IsDataFolderValid sFolder to bIsValid
+            If (bIsValid = True) Begin
+                Function_Return sFolder    
+            End
+        Loop
+        Function_Return sFolder    
+    End_Function
+
+    Function WorkspaceDataFolders Returns String[]
+        String[] asDataFolders
+        String sHomePath sFolder
+        Boolean bExists
+        Integer iCh
+
+        Get psHome of (phoWorkspace(ghoApplication)) to sHomePath
+        File_Exist (sHomePath + "Data*.") bExists
+        If (bExists = True) Begin
+            Get Seq_Open_Input_Channel ("dir:" + sHomePath + "Data*.") to iCh
+            If (iCh < 0) Begin
+                Function_Return asDataFolders
+            End
+
+            Repeat
+                Readln channel iCh sFolder
+                If (Trim(sFolder) <> "") Begin
+                    Move (Replace("[", sFolder, "")) to sFolder
+                    Move (Replace("]", sFolder, "")) to sFolder
+                    Move sFolder to asDataFolders[SizeOfArray(asDataFolders)]
+                End
+            Until (SeqEof = True)
+            Send Seq_Close_Channel iCh
+        End
+        Function_Return asDataFolders
+    End_Function
+
+    Procedure StoreOpenTables
+        tDFSMasterAlias[] aMasterAlias
+        Get _MasterAndAliasFiles to aMasterAlias
+        Set paMasterAlias to aMasterAlias
+    End_Procedure
+
+    // Returns a struct array with all currently open tables and a "state" that indicates if the table
+    // was opened DF_FILE_ALIAS_DEFAULT, DF_FILE_IS_MASTER or DF_FILE_IS_ALIAS
+    Function _MasterAndAliasFiles Returns tDFSMasterAlias[]
+        tDFSMasterAlias[] aMasterAlias
+        Integer hTable iMasterAliasType iSize
+        Boolean bOpen
+
+        Move 0 to hTable
+        Repeat
+            Get_Attribute DF_FILE_NEXT_USED of hTable to hTable
+            If (hTable <> 0) Begin
+                Get_Attribute DF_FILE_OPENED of hTable to bOpen
+                If (bOpen = True) Begin
+                    Get_Attribute DF_FILE_ALIAS of hTable to iMasterAliasType
+                    Move (SizeOfArray(aMasterAlias)) to iSize
+                    Move hTable to aMasterAlias[iSize].hTable
+                    Move iMasterAliasType to aMasterAlias[iSize].iMode
+                End
+            End
+        Until (hTable = 0)
+
+        Function_Return aMasterAlias
+    End_Function
+
+    // Message that re-opens all files in the filelist.cfg and restores any master & alias attributes.
+    // Takes one parameter:
+    //   A struct array with all master & alias
+    Procedure RestoreOpenTables
+        tDFSMasterAlias[] aMasterAlias
+        Integer hTable iFileAlias iSize iCount
+        Boolean bOpen
+        String sRootName
+
+        Move 0 to hTable
+        Get paMasterAlias to aMasterAlias
+        Move (SizeOfArray(aMasterAlias)) to iSize
+        Decrement iSize
+        For iCount from 0 to iSize
+            Move aMasterAlias[iCount].hTable to hTable
+            // We also need to check that the table hasn't been removed...
+            Get_Attribute DF_FILE_ROOT_NAME of hTable to sRootName
+            If (hTable <> 0 and sRootName <> "") Begin
+                Open hTable
+                Get_Attribute DF_FILE_OPENED of hTable to bOpen
+                If (bOpen = True) Begin
+                    Move aMasterAlias[iCount].iMode to iFileAlias
+                    If (iFileAlias = DF_FILE_IS_MASTER) Begin
+                        Set_Attribute DF_FILE_ALIAS of hTable to DF_FILE_IS_MASTER
+                    End
+                    Else If (iFileAlias = DF_FILE_IS_ALIAS) Begin
+                        Set_Attribute DF_FILE_ALIAS of hTable to DF_FILE_IS_ALIAS
+                    End
+                End
+            End
+        Loop
+    End_Procedure
+
+    Procedure OpenAllFilelistTables
+        Integer hTable
+
+        Move 0 to hTable
+        Repeat
+            If (hTable <> 0) Begin
+                Open hTable
+            End
+        Until (hTable = 0)
+
+    End_Procedure
+
+    // Returns True if the ini-file exists _and_ contains at least one byte.
+    Function IsIniFile Returns Boolean
+        Integer iFileSize iCh
+        Boolean bExists
+        String sIniFileName
+
+        Move False to bExists
+        Get psFileName to sIniFileName
+        If (sIniFileName = "") Begin
+            Function_Return False
+        End
+        Get Seq_New_Channel to iCh
+        If (iCh = DF_SEQ_CHANNEL_NOT_AVAILABLE) Begin
+            Move False to bExists
+        End
+        Else Begin
+            Direct_Input channel iCh sIniFileName
+            Get_Channel_Size iCh to iFileSize
+            Close_Input channel iCh
+            Move (iFileSize <> 0) to bExists
+        End
+
+        Function_Return bExists
+    End_Function
+
+    Function DFSFileLastWriteTime String sFilename Returns tWinFileTime
+        DWord dwAccess dwShared dwCreate
+        Handle hFile
+        Integer iRetval
+        tWinFileTime FileTime FileTimeEmpty
+        //
+        Append sFilename (Character(0)) (Character(0))
+        Move (GENERIC_READ ior GENERIC_WRITE) to dwAccess
+        Move FILE_SHARE_RANDOM   to dwShared
+        Move OPEN_EXISTING       to dwCreate
+
+        Move (DFS_Createfile(AddressOf(sFilename), dwAccess, dwShared, DFS_FNULL, dwCreate, FILE_ATTRIBUTE_NORMAL, DFS_FNULL)) to hFile
+        If (hFile = INVALID_HANDLE_VALUE) Begin
+            Function_Return FileTimeEmpty
+        End
+
+        Move 0 to FileTime.dwLowDateTime
+        Move (DFS_GetFileTime(hFile, DFS_FNULL, DFS_FNULL, AddressOf(FileTime))) to iRetval
+        If (iRetVal = 0) Begin           // Could not close
+            Function_Return FileTimeEmpty
+        End
+        Move (DFS_CloseHandle(hFile)) to iRetVal
+        If (iRetVal = 0) Begin           // Could not close
+            Function_Return FileTimeEmpty
+        End
+
+        Function_Return FileTime
+    End_Function
+
+
+    Function DFSGetFileExtension String sFileName Returns String
+        String sExtenstion
+        Integer iPos
+        
+        Get ExtractFileName sFileName to sFileName
+        Move (RightPos(".", sFileName)) to iPos
+        Move (Mid(sFileName, Length(sFileName), iPos)) to sExtenstion
+        
+        Function_Return sExtenstion
+    End_Function                   
+    
+    Function DFSFullWsFileNameFromSWSFile String sSWSFileName Returns String
+        Handle hoIniFile  
+        String sWSFileName sPath            
+        Boolean bSuccess
+        
+        Get ExtractFilePath sSWSFileName to sPath
+        Move (SetCurrentDirectory(sPath)) to bSuccess
+        Get Create (RefClass(cIniFile)) to hoIniFile
+        Set psFilename of hoIniFile to sSWSFileName
+        Get ReadString of hoIniFile "WorkspacePaths" "ConfigFile" "" to sWSFileName
+        Get FullPathNames of (phoWorkspace(ghoApplication)) sWSFileName to sWSFileName
+        Send Destroy of hoIniFile
+                                                                                            
+        Function_Return sWSFileName                                                                                            
+    End_Function
+
+    Function DFSGetApplicationFileName Returns String
+        // Returns the filename from Windows
+        Integer iNumChars
+        String sFilename
+        
+        Move (Repeat(Character(0), 1024)) to sFileName
+        Move (GetModuleFileName(0, AddressOf(sFilename), 1024)) to iNumChars
+        
+        Function_Return (CString(sFilename))
+    End_Function
+    
+    Function DFSGetApplicationPath Returns String
+        // Returns the path of the Application (no trailing "\")
+        String sApplicationFileName sPath
+        Boolean bRemoved
+        
+        Get DFSGetApplicationFileName  to sApplicationFileName
+        Move (PathRemoveFileSpec(AddressOf(sApplicationFileName))) to bRemoved
+        Move (CString(sApplicationFileName)) to sPath
+        
+        If (Right(sPath, 1) ="\") ;
+            Move (Left(sPath, Length(sPath) -1)) to sPath
+        Function_Return sPath
+    End_Function
+    
+End_Class
+
+Object oDataFolderSelector is a cDataFolderSelector
+    // Global handle to this object
+    Move Self to ghoDFSFolderSelector
+End_Object                                         

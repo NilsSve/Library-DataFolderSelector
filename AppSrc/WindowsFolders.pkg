@@ -1,0 +1,53 @@
+Use VdfBase.pkg
+
+Define CSIDL_PERSONAL_DFS for |CI$0005 // Version 6.
+
+Define SHGFP_TYPE_CURRENT_DFS for 0
+Define SHGFP_TYPE_DEFAULT_DFS for 1
+
+Define CI_OK_DFS          for |CI$0
+Define CI_FALSE_DFS       for |CI$1
+Define CI_FAIL_DFS        for |CI$80004005 // Unicode only
+Define CI_INVALIDARG_DFS  for |CI$80070057
+
+#IFNDEF Get_SHGetFolderPath
+External_Function SHGetFolderPath "SHGetFolderPathA" shell32.dll Handle hWnd Integer iFolder Handle hToken DWord dwFlags Address lpszPath Returns Integer
+#ENDIF
+    
+Function WindowsFolderPath Global Integer iFolderID Boolean bCurrentPath Returns String
+    String sPath
+    Integer iRetval
+    
+    Move (ZeroString(MAX_PATH)) to sPath
+    
+    If (bCurrentPath) Begin
+        Move (SHGetFolderPath (0, iFolderId, 0, SHGFP_TYPE_CURRENT_DFS, AddressOf(sPath))) to iRetval
+    End
+    Else Begin
+        Move (SHGetFolderPath (0, iFolderId, 0, SHGFP_TYPE_DEFAULT_DFS, AddressOf(sPath))) to iRetval 
+    End
+    
+    Case Begin
+        Case (iRetval = CI_OK_DFS) 
+            Move (CString (sPath)) to sPath
+#IF (!@ < 200)
+            Move (ToOEM (sPath)) to sPath
+#ELSE
+            Move (Utf8ToOem (sPath)) to sPath
+#ENDIF                               
+            Case Break
+        Case (iRetval = CI_INVALIDARG_DFS)
+            Error DFERR_PROGRAM "Invalid FolderID passed to the function"
+            Move "" to sPath
+            Case Break
+        Case (iRetval = CI_FAIL_DFS)
+            Error DFERR_PROGRAM "Invalid FolderID passed to the function"
+            Move "" to sPath
+            Case Break
+        Case (iRetval = CI_FALSE_DFS)
+            Error DFERR_PROGRAM "FolderID is correct but folder does not exist"
+            Move "" to sPath
+            Case Break
+    Case End
+    Function_Return sPath
+End_Function

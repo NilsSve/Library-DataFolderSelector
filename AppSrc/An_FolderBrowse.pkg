@@ -1,0 +1,1359 @@
+// An_FolderBrowse.pkg
+//  Produced by Ancilla Software, a trading name of Peter Crook, The Banks,
+//  Belle Hill, Kingsbridge, TQ7 1NJ, United Kingdom.
+//  AncillaSoftware@yahoo.co.uk
+//  Not to be used or distributed without the above attribution.
+//
+//  Provided as-is, without warranty and to be used at your own risk.
+//
+//----------------------------------------------------------------------------
+//  Modifications:
+//  ~~~~~~~~~~~~~~
+//  18/07/2014  PDC Created by augmenting the Folder Selector described by 
+//                  Vincent Oorsprong at:
+// http://support.dataaccess.com/Forums/entry.php?125-A-Folder-Selector-With-Initial-Folder-Setting
+//                  and converting it to a class package.
+//  05/09/2014  PDC Added blank icon to dialog following suggestion by 
+//                  Nils Svedmyr.
+//              NS  "Cursor Wait/Ready" added to ReadFolderData message.
+//
+//  Usage:
+//  ~~~~~
+//  The class implements a folder selection dialog as described in Vicent's 
+//  blog with additional properties, events and methods to add most of the 
+//  capabilities found in the Windows SHBrowseForFolder function and to make 
+//  it easy to use as a prompt object.
+//
+//  The documentation for the class is contained in the RTF document
+//  "Folder Browse Dialog class notes" in the Help directory.
+//
+Use Windows.pkg
+Use dfTreeVw.pkg
+Use cCJCommandBarSystem.pkg
+Use FileDateTime.pkg
+Use cDataFolderLanguageConstants.inc
+
+#IFNDEF GET_PathIsDirectory
+ External_Function WinAPI_PathIsDirectory "PathIsDirectoryA" SHLWAPI.DLL Pointer lpszPath Returns Integer
+
+ // Verifies that a path is a valid directory.
+ //
+ // Returns TRUE if the path is a valid directory, or FALSE otherwise.
+ //
+ // Parameters:
+ //      sPath - Address of the path to verify.
+ Function PathIsDirectory Desktop String sPath Returns Integer
+     Boolean bRetVal
+
+     Move (sPath - Character (0)) to sPath
+     Move (WinAPI_PathIsDirectory (AddressOf (sPath))) to bRetVal
+
+     Function_Return bRetVal
+ End_Function
+#ENDIF
+
+#IFNDEF umPromptRelational
+ Enum_List
+     Define umPromptRelational
+     Define umPromptValue
+     Define umPromptCustom
+     Define umPromptNonInvoking
+ End_Enum_List
+#ENDIF
+
+// Supporting classes definitions
+Class An_FolderImageList is a cImageList32
+
+    Procedure OnCreate
+        String sPath
+        Integer iImage
+        
+        Get_File_Path "DFSFolder.bmp" to sPath
+        
+        If (sPath = "") Begin
+           Get DFSGetApplicationPath of ghoDFSFolderSelector to sPath
+           Get ExtractFilePath sPath to sPath
+           Get AddImage (sPath+"Bitmaps\DFSFolder.bmp")       to iImage
+           Get AddImage (sPath+"Bitmaps\DFSNetworkDrive.bmp") to iImage
+           Get AddImage (sPath+"Bitmaps\DFSHarddisk.bmp")     to iImage
+           Get AddImage (sPath+"Bitmaps\DFSCDRom.bmp")        to iImage   
+        End               
+        Else Begin
+           Get AddImage "DFSFolder.bmp"       to iImage
+           Get AddImage "DFSNetworkDrive.bmp" to iImage
+           Get AddImage "DFSHarddisk.bmp"     to iImage
+           Get AddImage "DFSCDRom.bmp"        to iImage
+        End
+    End_Procedure
+
+    Enum_List
+        Define C_FOLDERBMP
+        Define C_NETWORKDRIVEBMP
+        Define C_HARRDISKBMP
+        Define C_CDROMBMP
+    End_Enum_List
+
+End_Class
+
+// The items in the folder tree have their ItemChildCount set to 1 if the 
+// folder they represent has subfolders.
+// The child items themselves are created only when the itme is expanded 
+// and are destroyed when the item is collapsed so if the ChildItem method 
+// returns a value we know the item has been expanded.
+Class An_FolderBrowseExpandMenuItem is a cCJMenuItem
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set psCaption to "Expand" 
+        Set psCaption to CS_DFSExpand
+        Set psDescription to CS_DFSExpandHelp
+        Set pbActiveUpdate to True
+    End_Procedure 
+
+    Procedure OnCreateControl Handle hoObj
+        Set ComDefaultItem of hoObj to (IsEnabled(Self))
+    End_Procedure 
+    
+    Procedure OnUpdate
+        Handle  hItem hChild
+        Get CurrentTreeItem to hItem
+        Get ChildItem hItem to hChild
+        Set psCaption to (If(hChild > 0, CS_DFSExpand, CS_DFSCollapse))
+    End_Procedure
+    
+    Function IsEnabled Returns Boolean
+        Integer iCount
+        Handle  hItem
+        Get CurrentTreeItem      to hItem
+        Get ItemChildCount hItem to iCount
+        Function_Return (iCount > 0)
+    End_Function
+    
+    Procedure OnExecute Variant vCommandBarControl
+        Handle  hItem hChild
+        Get CurrentTreeItem to hItem
+        Get ChildItem hItem to hChild
+        If (hChild > 0) Begin
+            Send CollapseItem hItem
+        End
+        Else Begin
+            Send ExpandItem   hItem
+        End
+    End_Procedure
+
+End_Class
+
+Class An_FolderBrowseoDeleteFolderMenuItem is a cCJMenuItem
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set psCaption to "Delete"       
+        Set psCaption to C_$Delete
+        Set pbControlBeginGroup to True
+        Set psDescription to CS_DFSDeleteFolderHelp
+    End_Procedure  
+    
+    Function IsVisible Returns Boolean
+        Boolean bVisible
+        Get pbCanDeleteFolder to bVisible
+        Function_Return bVisible
+    End_Function   
+    
+    Procedure OnExecute Variant vCommandBarControl
+        Send DeleteFolder to oFolderTree
+    End_Procedure
+
+End_Class
+
+Class An_FolderBrowseRenameMenuItem is a cCJMenuItem
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set psCaption to "Rename"   
+        Set psCaption to CS_DFSRename
+        Set psDescription to CS_DFSRenameHelp
+    End_Procedure   
+    
+    Function IsVisible Returns Boolean
+        Boolean bVisible
+        Get pbCanRenameFolder to bVisible
+        Function_Return bVisible
+    End_Function    
+    
+    Procedure OnExecute Variant vCommandBarControl
+        Send RenameFolder to oFolderTree
+    End_Procedure
+
+End_Class
+
+Class An_FolderBrowseNewFolderMenuItem is a cCJMenuItem
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set psCaption to "Folder"   
+        Set psCaption to CS_DFSFolder
+        Set psDescription to CS_DFSCreateFolderHelp
+    End_Procedure
+    
+    Procedure OnExecute Variant vCommandBarControl
+        Send CreateFolder of oFolderTree
+    End_Procedure
+
+End_Class
+
+Class An_FolderBrowseNewMenuItem is a cCJMenuItem
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set peControlType to xtpControlPopup
+        Set psCaption to "New" 
+        Set psCaption to C_$New
+    End_Procedure
+    
+    Function IsVisible Returns Boolean
+        Boolean bHidden
+        Get pbNoNewFolder to bHidden
+        Function_Return (not(bHidden))
+    End_Function
+
+End_Class
+
+Class An_FolderBrowseFolderTree is a TreeView
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set pbExplorerStyle     to True
+        Set TreeEditLabelsState to True
+        Set ImageListObject     to oImageList
+
+        Enum_List
+            Define C_HARDDISKITEM for 1
+            Define C_CDROMITEM
+            Define C_NETWORKDRIVEITEM
+            Define C_FOLDERITEM
+        End_Enum_List
+
+        Object oFolderContextMenu is a cCJContextMenu
+            Object oExpandMenuItem is a An_FolderBrowseExpandMenuItem
+            End_Object
+            
+            Object oDeleteFolderMenuItem is a An_FolderBrowseoDeleteFolderMenuItem
+            End_Object
+            
+            Object oRenameMenuItem is a An_FolderBrowseRenameMenuItem
+            End_Object
+            
+            Object oNewMenuItem is a An_FolderBrowseNewMenuItem
+                Set pbControlBeginGroup to True
+                
+                Object oNewFolderMenuItem is an An_FolderBrowseNewFolderMenuItem
+                End_Object
+            
+            End_Object
+            
+        End_Object
+
+        On_Key Key_F2            Send RenameFolder
+        On_Key kDelete_Character Send DeleteFolder
+    End_Procedure
+
+    Procedure OnItemRClick Handle hItem
+        Set CurrentTreeItem to hItem
+        Send Popup to oFolderContextMenu
+    End_Procedure
+
+    // Returns True if CurrentTreeItem _really_ points to a folder
+    Function CurrentNodeIsFolder Returns Boolean
+        String  sItemFullPath
+        Boolean bExist
+        Handle  hItem
+
+        Get CurrentTreeItem               to hItem
+        Get ItemFullPath hItem            to sItemFullPath
+        Get PathIsDirectory sItemFullPath to bExist
+        Function_Return bExist
+    End_Function
+
+    // Returns True if CurrentTreeItem has just been created and has no sub-folders
+    Function CurrentNodeIsNewFolder Returns Boolean
+        Integer iItemData
+        String  sItemFullPath
+        Boolean bExist
+        Handle  hItem hChildItem
+
+        Get CurrentTreeItem to hItem
+        Get ItemData hItem to iItemData
+        Get ChildItem hItem to hChildItem
+        Function_Return (iItemData <= -1 and hChildItem = 0)
+    End_Function
+
+    Function LocateTreeItem String[] ByRef sPaths Returns Handle
+        Handle hItem
+        Integer iPaths iPath
+        Register_Function psRootFolder Returns String
+        
+        Move (SizeOfArray (sPaths)) to iPaths
+        If (iPaths > 0) Begin
+            If (psRootFolder(Self) = "") Begin
+                Get LocateRootItem (Lowercase (sPaths[0])) to hItem
+            End
+            Else Begin
+                Get RootItem to hItem
+            End
+            If (hItem > 0) Begin
+                Decrement iPaths
+                For iPath from 1 to iPaths
+                    Get LocateItem (Lowercase (sPaths[iPath])) hItem to hItem
+                    If (hItem = 0) Break
+                Loop
+            End
+        End
+        
+        Function_Return hItem
+    End_Function
+
+    // Augment to pre-pend root folder if necessary
+    Function ItemFullPath Handle hItem Returns String
+        String  sDirSep sRootFolder sFullPath
+
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        Get psRootFolder to sRootFolder
+        If (Right(sRootFolder,1) = sDirSep) Begin
+            Move (Left(sRootFolder,RightPos(sDirSep,sRootFolder))) to sRootFolder
+        End
+        Forward Get ItemFullPath hItem to sFullPath
+        
+        Function_Return (Left(sRootFolder,RightPos(sDirSep,sRootFolder)) - sFullPath)
+    End_Function
+
+    Function LocateItem String sValue Handle hItem Returns Handle
+        String sItemLabel
+        
+        Get ChildItem hItem to hItem
+        While (hItem > 0)
+            Get ItemLabel hItem to sItemLabel
+            If (Lowercase (sItemLabel) = sValue) Begin
+                Send DoExpandItem hItem
+                Function_Return hItem
+            End
+            Get NextSiblingItem hItem to hItem
+        Loop
+        
+        Function_Return 0
+    End_Function
+    
+    Function LocateRootItem String sDrive Returns Handle
+        Handle hRootItem
+        String sItemLabel
+
+        Get RootItem to hRootItem
+        While (hRootItem > 0)
+            Get ItemLabel hRootItem to sItemLabel
+            If (Lowercase (sItemLabel) = sDrive) Begin
+                Send DoExpandItem hRootItem
+                Function_Return hRootItem
+            End
+            Get NextSiblingItem hRootItem to hRootItem
+        Loop
+        
+        Function_Return 0
+    End_Function
+
+    // Return the handle to the tree item for the folder sFolder
+    // Returns 0 if none
+    Function LocateFolder String sFolder Returns Handle
+        Integer iPos
+        String  sTreeLevelDelimeter sDirSep sRootFolder
+        String[] sPaths
+        Handle  hItem
+        
+        Get TreeLevelDelimeter to sTreeLevelDelimeter
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        Get psRootFolder       to sRootFolder
+        If (sRootFolder <> "") Begin
+            Move (Replace(Left(sRootFolder,RightPos(sDirSep,sRootFolder)),sFolder,"")) to sFolder
+        End
+        While (sFolder <> "")
+            Move (Pos (sTreeLevelDelimeter, sFolder)) to iPos
+            If (iPos > 0) Begin
+                Move (Left (sFolder, iPos - 1)) to sPaths[SizeOfArray (sPaths)]
+                Move (Right (sFolder, Length (sFolder) - iPos)) to sFolder
+            End
+            Else Begin
+                Move sFolder to sPaths[SizeOfArray (sPaths)]
+                Move "" to sFolder
+            End
+        Loop
+        Get LocateTreeItem (&sPaths) to hItem
+
+        Function_Return hItem
+    End_Function    
+
+    Procedure LocateFolder String sCurrentFolder
+        Handle hItem
+        Get LocateFolder sCurrentFolder to hItem
+        If (hItem > 0) Begin
+            Set CurrentTreeItem to hItem
+        End
+    End_Procedure
+
+    Procedure OnItemChanged Handle hItem Handle hItemOld
+        String sValue
+        Get ItemLabel hItem to sValue
+        Set Value of oFolderNameForm to sValue
+    End_Procedure
+
+    Procedure AddSubFolders Handle hitem
+        String sDirSep sMask sFolderPath sRootFolder
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        Move (SysConf(SYSCONF_FILE_MASK))     to sMask
+        Get ItemFullPath hItem to sFolderPath
+        Send ReadFolderData sFolderPath hItem
+    End_Procedure
+
+    Procedure ExpandItem Handle hItem
+        Handle hChild
+        Get ChildItem hItem to hChild
+        If (hChild = 0) Begin
+            Send AddSubFolders hItem
+        End
+        Send DoExpandItem hItem
+    End_Procedure
+
+    Procedure OnItemExpanding Handle hItem
+        Handle hChild
+        Get ChildItem hItem to hChild
+        If (hChild = 0) Begin
+            Send AddSubFolders hItem
+        End
+    End_Procedure
+
+    Procedure CollapseItem Handle hItem
+        Send DoCollapseItem  hItem
+        Send OnItemCollapsed hItem
+    End_Procedure
+
+    Procedure OnItemCollapsed Handle hItem
+        Boolean bHasChildren
+        Handle hChildItem
+        
+        Get ChildItem hItem to hChildItem
+        Move (hChildItem > 0) to bHasChildren
+        While (hChildItem > 0)
+            Send DoDeleteItem hChildItem
+            Get ChildItem hItem to hChildItem
+        Loop
+        If (bHasChildren) Begin
+            Set ItemChildCount hItem to 1    // so it can be expanded again
+        End
+    End_Procedure
+
+    Function HasSubFolders String sPath Returns Boolean
+        Integer iElements iElement
+        Boolean bContainsFolders
+        tFileDateTime_FDT[] FileInfo
+
+#IF (!@ < 200)
+        // Bugfix to allow for extended characters e.g. "èéôÜÑî"
+        // in folder names:
+        If ((SizeOfArray(FileInfo)) = 0) Begin
+            Move (FileDateTime(ToAnsi (sPath))) to FileInfo
+        End
+        Else Begin
+            Move (FileDateTime(sPath)) to FileInfo
+        End
+//        Move (FileDateTime(ToAnsi (sPath))) to FileInfo
+#ELSE
+        Move (FileDateTime(Utf8ToAnsi (sPath))) to FileInfo
+#ENDIF
+        Move (SizeOfArray(FileInfo)) to iElements
+        Decrement iElements
+        For iElement from 0 to iElements
+            Move (IsFlagIn (FILE_ATTRIBUTE_DIRECTORY, FileInfo[iElement].iAttributes);
+                  and not(IsFlagIn (FILE_ATTRIBUTE_HIDDEN, FileInfo[iElement].iAttributes));
+                  and FileInfo[iElement].sFileName <> "." and FileInfo[iElement].sFileName <> "..");
+              to bContainsFolders
+            If (bContainsFolders) Break
+        Loop
+        
+        Function_Return bContainsFolders
+    End_Function
+
+    Procedure ReadFolderData String sPath Handle hRootItem
+        Integer iElements iElement
+        String  sDirSep sMask
+        Boolean bContainsFolders
+        Handle  hItem
+        tFileDateTime_FDT[] FileInfo
+
+        Send Cursor_Wait to Cursor_Control
+        Move (SysConf(SYSCONF_DIR_SEPARATOR))                to sDirSep
+        Move (SysConf(SYSCONF_FILE_MASK))                    to sMask
+#IF (!@ < 200)
+        Move (FileDateTime(ToAnsi(sPath - sDirSep - sMask))) to FileInfo
+#ELSE
+        Move (FileDateTime(Utf8ToAnsi(sPath - sDirSep - sMask))) to FileInfo
+#ENDIF
+        Move (SizeOfArray(FileInfo))                         to iElements
+        Decrement iElements
+        For iElement from 0 to iElements
+            If (IsFlagIn (FILE_ATTRIBUTE_DIRECTORY, FileInfo[iElement].iAttributes);
+                and not(IsFlagIn (FILE_ATTRIBUTE_HIDDEN, FileInfo[iElement].iAttributes));
+                and FileInfo[iElement].sFileName <> "." ;
+                and FileInfo[iElement].sFileName <> "..") ;
+            Begin
+#IF (!@ < 200)
+                Get AddTreeItem (ToOem (FileInfo[iElement].sFileName)) hRootItem C_FOLDERITEM 0 0 to hItem
+#ELSE
+                Get AddTreeItem (Utf8ToOem (FileInfo[iElement].sFileName)) hRootItem C_FOLDERITEM 0 0 to hItem
+#ENDIF
+                Get HasSubFolders (sPath - sDirSep - FileInfo[iElement].sFileName - sDirSep - sMask) to bContainsFolders
+                If (bContainsFolders) Set ItemChildCount hItem to 1
+            End
+        Loop
+
+        Send Cursor_Ready to Cursor_Control
+    End_Procedure
+
+    Procedure CreateFolder
+        Integer iCount
+        String  sDirSep sCurrentFolder sNewFolder sNewSubFolderName
+        Boolean bExist
+        Handle  hItem hNewItem
+
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        Get CurrentTreeItem to hItem
+        Get ItemFullPath hItem to sCurrentFolder
+        If (Right (sCurrentFolder, 1) <> sDirSep) Begin
+            Move (sCurrentFolder - sDirSep) to sCurrentFolder
+        End
+        Move CS_DFSNewFolder to sNewSubFolderName
+        Move (sCurrentFolder - sNewSubFolderName) to sNewFolder
+        Get PathIsDirectory sNewFolder to bExist
+        While (bExist)
+            Increment iCount
+            Move (CS_DFSNewFolder - "(" - String (iCount) - ")") to sNewSubFolderName
+            Move (sCurrentFolder - sNewSubFolderName) to sNewFolder
+            Get PathIsDirectory sNewFolder to bExist
+        Loop
+        Set ItemChildCount hItem to 1
+        Get AddTreeItem sNewSubFolderName hItem -1 C_FOLDERBMP C_FOLDERBMP to hNewItem
+        Send DoExpandItem hItem
+        Set CurrentTreeItem to hNewItem
+        Send Windows_Message TVM_EDITLABEL 0 hNewItem
+    End_Procedure
+
+    Procedure RenameFolder
+        Boolean bCanRename
+        Handle hItem
+        Get pbCanRenameFolder to bCanRename
+        If (bCanRename) Begin
+            Get CurrentTreeItem to hItem
+            Send Windows_Message TVM_EDITLABEL 0 hItem
+        End
+    End_Procedure
+
+    Procedure DeleteFolder
+        Integer eResponse
+        String  sCurrentFolder
+        Boolean bCanDelete bWasTrapped bExist
+        Handle  hItem
+
+        Get pbCanDeleteFolder to bCanDelete
+        If (bCanDelete) Begin
+            Get CurrentTreeItem to hItem
+            Get ItemFullPath hItem to sCurrentFolder
+            Get YesNo_Box (CS_DFSDeleteFolder - ":" * String(sCurrentFolder) - "?") C_$Confirm MB_DEFBUTTON2 to eResponse
+            If (eResponse = MBR_Yes) Begin
+                Get isTrapped of (trappedErrors(Error_Object_Id)) DFERR_RAWFILE_ERROR to bWasTrapped
+                Send Ignore_Error to Error_Object_Id DFERR_RAWFILE_ERROR
+                Move False to Err
+                Remove_Directory sCurrentFolder
+                If (bWasTrapped) Begin
+                    Send Trap_Error to Error_Object_Id DFERR_RAWFILE_ERROR
+                End
+                Get PathIsDirectory sCurrentFolder to bExist
+                If (bExist) Begin
+                    Send UserError (CS_DFSCannotRemoveFolder * String(sCurrentFolder))
+                End
+                Else Begin
+                    Send DoDeleteItem hItem
+                End
+            End
+        End
+    End_Procedure
+
+    Procedure OnBeginLabelEdit Handle hItem Boolean ByRef bCancel
+        Boolean bCanRename
+        Get pbCanRenameFolder to bCanRename
+        Move (not(bCanRename)) to bCancel
+    End_Procedure
+
+    Procedure OnEndLabelEdit Handle hItem String sNewLabel Boolean bWasCanceled Boolean ByRef bCancel
+        Integer iItemData iPos
+        String  sDirSep sItemFullPath sNewFolder
+
+        Get ItemFullPath hItem to sItemFullPath      
+        // Make it properly handle extended characters, aka "èéôÜÑî".
+#IF (!@ < 200)
+        Move (ToANSI(sItemFullPath)) to sItemFullPath
+#ELSE
+        Move (Utf8ToAnsi(sItemFullPath)) to sItemFullPath
+#ENDIF
+        If (bWasCanceled) Begin
+            Move sItemFullPath to sNewFolder
+        End
+        Else Begin
+            Move (SysConf(SYSCONF_DIR_SEPARATOR))         to sDirSep
+            Move (RightPos (sDirSep, sItemFullPath))      to iPos
+            Move (Left (sItemFullPath, iPos) - sNewLabel) to sNewFolder
+        End
+        Get ItemData hItem to iItemData
+        // We are creating a new folder
+        If (iItemData = -1) Begin   
+            Set ItemData hItem to -2
+            Make_Directory sNewFolder
+        End                        
+        // We are renaming an existing folder
+        Else Begin
+            RenameFile sItemFullPath to sNewLabel
+        End
+    End_Procedure
+
+    Procedure BuildTree
+        Integer iDriveRequired iDrive iDriveStatus
+        String  sDirSep sMask sRootFolder sCurrentFolder
+        Handle  hItem
+
+        Get psRootFolder to sRootFolder
+        If (Length(sRootFolder) < 4) Begin  // i.e. it is blank or is e.g. "D:\"
+            Move ((Ascii(Left(sRootFolder,1)) - 64) max 0) to iDriveRequired
+            For iDrive from 1 to 26
+                If (iDriveRequired = 0 or iDrive = iDriveRequired) Begin
+                    GetDskInfo iDrive iDriveStatus
+                    If (iDriveStatus > Drive_root_not_exist) Begin
+                        If      (iDriveStatus = Drive_fixed);
+                                Get AddTreeItem (Character (iDrive + 64) + ":") 0 C_HARDDISKITEM C_HARRDISKBMP C_HARRDISKBMP             to hItem
+                        Else If (iDriveStatus = Drive_cdrom);
+                                Get AddTreeItem (Character (iDrive + 64) + ":") 0 C_CDROMITEM C_CDROMBMP C_CDROMBMP                      to hItem
+                        Else If (iDriveStatus = Drive_remote);
+                                Get AddTreeItem (Character (iDrive + 64) + ":") 0 C_NETWORKDRIVEITEM C_NETWORKDRIVEBMP C_NETWORKDRIVEBMP to hItem
+                        Set ItemChildCount hItem to 1   // assume drive contains folders rather than spend time checking
+                    End
+                End
+            Loop
+        End
+        Else Begin
+            Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+            Move (SysConf(SYSCONF_FILE_MASK))     to sMask
+            If (Right(sRootFolder,1) = sDirSep) Begin
+                Move (Left(sRootFolder,Length(sRootFolder) - 1)) to sRootFolder
+            End
+            Move (Right(sRootFolder,Length(sRootFolder) - RightPos(sDirSep,sRootFolder))) to sCurrentFolder
+            Get AddTreeItem sCurrentFolder 0 C_FOLDERITEM C_FOLDERBMP C_FOLDERBMP to hItem
+            Send ReadFolderData sRootFolder hItem
+            Send ExpandItem hItem
+        End
+    End_Procedure 
+
+End_Class
+
+{ OverrideProperty=Label InitialValue="Folder:" }
+Class An_FolderBrowseFolderNameForm is a Form
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set Label            to (CS_DFSFolder + ":")
+//        Set Label_Row_Offset to 1
+//        Set Label_Col_Offset to 30
+        Set Label_Justification_mode to JMode_Right
+        Set Label_Col_Offset to 2
+        Set Label_Row_Offset to 0
+        Set Visible_State    to False
+        Set Enabled_State    to False
+        On_Key kEnter Send ValidateEntry
+    End_Procedure
+    
+    Procedure ValidateEntry
+        String sValue
+        Handle hItem
+        Get Value to sValue
+        Get LocateFolder of oFolderTree sValue to hItem
+        If (hItem = 0) Begin
+            Send InvalidFolderError sValue
+        End
+        Else Begin
+            Set CurrentTreeItem of oFolderTree to hItem
+            Delegate Send OK
+        End
+    End_Procedure
+    
+End_Class
+
+{ OverrideProperty=Label InitialValue="Make New Folder" }
+Class An_FolderBrowseNewFolderBtn is a Button
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set Size to 14 63
+        Set Label to CS_DFSMakeNewFolder
+        Set Location to 0 0
+        Set peAnchors to anBottomLeft
+    End_Procedure
+    
+    Procedure OnClick
+        Send CreateFolder of oFolderTree
+    End_Procedure
+    
+End_Class
+
+{ OverrideProperty=Label InitialValue="OK" }
+Class An_FolderBrowseOkBtn is a Button
+    
+    Procedure Construct_Object
+        String sValue
+        Forward Send Construct_Object
+//        Set Size to 12 50
+        Get psOKText to sValue
+        Set Label to sValue
+        Set Location to 0 68
+        Set peAnchors to anBottomRight
+        Set Default_State to True
+    End_Procedure
+    
+    Procedure OnClick
+        Delegate Send Ok
+    End_Procedure
+    
+End_Class
+
+{ OverrideProperty=Label InitialValue="Cancel" }
+Class An_FolderBrowseCancelBtn is a Button
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+//        Set Size to 12 50
+        Set Label    to C_$Cancel
+        Set Location to 0 122
+        Set peAnchors to anBottomRight
+    End_Procedure
+    
+    Procedure OnClick
+        Delegate Send Cancel
+    End_Procedure
+    
+End_Class
+
+Class An_FolderBrowseButtonContainer is a Container3d
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set Size to 14 173
+        Set Border_Style to Border_None
+        
+        Object oNewFolderBtn is a An_FolderBrowseNewFolderBtn
+        End_Object
+        
+        Object oOkBtn is a An_FolderBrowseOkBtn
+        End_Object
+        
+        Object oCancelBtn is a An_FolderBrowseCancelBtn
+        End_Object
+        
+    End_Procedure
+    
+    Procedure Ok
+        Delegate Send Ok
+    End_Procedure
+    
+    Procedure Cancel
+        Delegate Send Cancel
+    End_Procedure
+    
+End_Class
+
+//  *** Main class definition ***
+//
+{ OverrideProperty=size InitialValue=198,191 }  
+{ DesignTime=False }
+Class An_FolderBrowseDialog is a ModalPanel
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set Label to "Browse for Folder" 
+        Set Label to CS_DFSBrowseForFolder
+        Set Size to 202 191
+        Set Location to 2 2
+        Set piMinSize to 89 187
+        Set Border_Style to Border_Thick
+        
+        On_Key kCancel Send Cancel
+
+        // Properties specific to this class 
+        // (see also the 'virtual' properties defined by a Procedure Set: 
+        // psTitle, pbShowUserHint, pbShowEditBox, pbCanReNameFolder and pbCanDeleteFolder)
+        //
+        { Category=Appearance }
+        Property String  psDefaultUserHint CS_DFSDefaultUserHint  // Text to be displayed beneath the folder tree 
+        { Category=Appearance }
+        Property String  psOKText C_$OK          // The text to be displayed on the 'OK' button
+        { Category=Behavior }
+        Property String  psRootFolder       // Start the folder tree at this directory
+        { Category=Behavior }
+        Property String  psDefaultSeedValue // the value to be used as the seed value if that in psSeedValue is blank or invalid
+
+        // The following property is set internally and should not be changed:
+        { DesignTime=False }
+        Property String psSelectedFolder    // The full path of the folder selected by the user
+
+
+        // Properties to support standard prompt list behaviour:
+        //
+        { EnumList="umPromptValue,umPromptCustom,umPromptNonInvoking" }
+        Property Integer peUpdateMode umPromptValue
+        { Category=Behavior }
+        Property Boolean pbAutoSeed True    // if we should seed list from invoking data
+        { Category=Behavior }
+        Property String  psSeedValue '' // The full path of the Folder to be displayed when the object is invoked
+        { Category=Behavior }
+        Property Handle phmPromptUpdateCallback 0
+
+        // The following properties are set internally and should not be changed:
+        //
+        { DesignTime=False }
+        Property Integer phoInvokingObject
+        // This is set upon closing the list and can be used for manual list updates
+        { DesignTime=False }
+        Property Boolean pbCanceled
+
+        // Private properties:
+        //
+        { Visibility=Private }
+        Property Boolean privatepbShowEditBox
+        { Visibility=Private }
+        Property Boolean privatepbNoNewFolder
+        { Visibility=Private }
+        Property Boolean privatepbCanRenameFolder
+        { Visibility=Private }
+        Property Boolean privatepbCanDeleteFolder
+
+        { Visibility=Private }
+        Property String  psStoredTitle
+        { Visibility=Private }
+        Property String  psStoredUserHint
+        { Visibility=Private }
+        Property Boolean pbStoredShowEditBox
+        { Visibility=Private }
+        Property String  psStoredOKText
+        { Visibility = Private }
+        Property Boolean pbStoredNoNewFolder
+        { Visibility=Private }
+        Property Boolean pbStoredCanRenameFolder
+        { Visibility=Private }
+        Property Boolean pbStoredCanDeleteFolder
+        { Visibility=Private }
+        Property String psStoredRootFolder
+        { Visibility=Private }
+        Property Integer peStoredUpdateMode
+        { Visibility=Private }
+        Property Boolean pbStoredAutoSeed
+        { Visibility=Private }
+        Property Handle  phmStoredPromptUpdateCallback
+
+
+        // Child objects:
+        //
+        Object oImageList is a An_FolderImageList
+        End_Object
+
+        Object oTitleTB is a TextBox
+            Set Size to 20 171
+            Set Auto_Size_State to False
+            Set Justification_Mode to JMode_Left
+            Set Location to 5 10
+            Set peAnchors to anLeftRight
+            Set Enabled_State to False
+        End_Object
+
+        Object oFolderTree is an An_FolderBrowseFolderTree
+            Set Size to 166 171
+            Set Location to 0 10
+            #IF (1=0)
+                Set Location to 30 10
+            #ENDIF
+            Set peAnchors to anAll
+        End_Object
+
+        Object oFolderNameForm is a An_FolderBrowseFolderNameForm
+            Set Size to 12 141
+            Set Location to 173  40
+            #IF (1=0)
+                Set Location to 202 40
+            #ENDIF
+            Set peAnchors to anBottomLeftRight
+        End_Object
+
+        Object oUserHintTB is a TextBox
+            Set Size to 20 171
+            Set Auto_Size_State to False
+            Set Justification_Mode to JMode_Left
+            Set Location to 177  10
+            #IF (1=0)
+                Set Location to 202 10
+            #ENDIF
+            Set peAnchors to anBottomLeftRight
+            Set Visible_State to False
+            Set Enabled_State to False
+        End_Object
+
+        Object oButtonContainer is a An_FolderBrowseButtonContainer
+            Set Location to 180 10
+            #IF (1=0)
+                Set Location to 220 10
+            #ENDIF
+            Set peAnchors to anBottomLeftRight
+        End_Object  
+
+    End_Procedure
+
+
+    // Virtual properties:
+    //
+    { MethodType = Property Category = Appearance }
+    // Text to be displayed above the folder tree
+    Procedure Set psTitle String sTitle 
+        Integer iSize iHt
+        String  sOldTitle
+        Boolean bTitleShown
+        
+        Get psTitle to sOldTitle
+        Set Label of oTitleTB to sTitle
+        Set Visible_State of oTitleTB to (sTitle <> "")
+        If (sTitle <> sOldTitle and (sTitle = "" or sOldTitle ="")) Begin
+            Get Size of oTitleTB to iSize
+            Move (Hi(iSize)) to iHt
+            Send MoveTree (If(sTitle = "", -iHt, iHt))
+        End
+    End_Procedure                                
+    
+    { MethodType = Property }
+    Function psTitle Returns String
+        String sTitle
+        Get Label of oTitleTB to sTitle
+        Function_Return sTitle
+    End_Function
+
+    { MethodType = Property  Category=Appearance  }
+    // Text to be displayed below the folder tree
+    Procedure Set psUserHint String sHint     
+        Integer iSize iHt
+        String  sOldHint
+        Boolean bHintShown bHasEditBox
+        
+        Get psUserHint to sOldHint
+        Get pbShowEditBox to bHasEditBox
+        If (not(bHasEditBox)) Begin
+            Set Visible_State of oUserHintTB to True
+            Set Label of oUserHintTB to sHint
+            If (sHint <> sOldHint and (sHint = "" or sOldHint = "")) Begin
+                Get Size of oUserHintTB to iSize
+                Move (Hi(iSize)) to iHt
+                Send MoveButtons (If(sHint = "", -(iHt), iHt))
+            End
+        End
+    End_Procedure
+    
+    { MethodType = Property }
+    Function psUserHint Returns String
+        String sHint
+        Get Label of oUserHintTB to sHint
+        Function_Return sHint
+    End_Function
+
+    { MethodType = Property Category = Behaviour}
+    // Include an edit control (DataFlex Form) in the browse dialog box that allows the user to type the name of an item
+    Procedure Set pbShowEditBox Boolean bShow          
+        Integer iSize iHt iSize2 iHt2
+        String  sHint
+        Boolean bBoxShown
+        
+        Get pbShowEditBox to bBoxShown
+        If (bShow <> bBoxShown) Begin
+            If (bShow) Begin
+                Set Visible_State of oUserHintTB to False
+            End
+            Set Visible_State of oFolderNameForm to bShow
+            Set Enabled_State of oFolderNameForm to bShow
+            Set PrivatepbShowEditBox to bShow
+            Get Size of oFolderNameForm to iSize
+            Move (Hi(iSize)) to iHt
+            If (psUserHint(Self) <> "") Begin
+                Get Size of oUserHintTB to iSize2
+                Move (iHt - Hi(iSize2)) to iHt
+            End
+            Send MoveButtons (If(bShow, iHt, -(iHt)))
+        End
+    End_Procedure
+    
+    { MethodType = Property }
+    Function pbShowEditBox Returns Boolean
+        Boolean bShow
+        Get privatepbShowEditBox to bShow
+        Function_Return bShow
+    End_Function
+
+    { MethodType = Property Category = Behaviour}
+    // Set True to inhibit creation of new folders
+    Procedure Set pbNoNewFolder Boolean bNoNewFolder      
+        Set privatepbNoNewFolder to bNoNewFolder
+        Set Visible_State of oNewFolderBtn to (not(bNoNewFolder))
+    End_Procedure
+    
+    { MethodType = Property }
+    Function pbNoNewFolder Returns Boolean
+        Boolean bNoNewFolder
+        Get privatepbNoNewFolder to bNoNewFolder
+        Function_Return bNoNewFolder
+    End_Function
+
+    { MethodType = Property Category=Behavior }         
+    // Set True to allow any folder to be renamed
+    Procedure Set pbCanRenameFolder Boolean bCanRename  
+        Set privatepbCanRenameFolder to bCanRename
+    End_Procedure
+    
+    { MethodType = Property }
+    Function pbCanRenameFolder Returns Boolean
+        Boolean bOK
+        Get CurrentNodeIsNewFolder of oFolderTree to bOK
+        If (not(bOK)) Begin
+            Get privatepbCanRenameFolder to bOK
+            If (bOK) Begin
+                Get CurrentNodeIsFolder of oFolderTree to bOK
+            End
+        End
+        Function_Return bOK
+    End_Function
+
+    { MethodType = Property Category=Behavior }
+    // set True to allow any folder to be deleted
+    Procedure Set pbCanDeleteFolder Boolean bCanDelete  
+        Set PrivatepbCanDeleteFolder to bCanDelete
+    End_Procedure
+    { MethodType = Property }
+    
+    Function pbCanDeleteFolder Returns Boolean
+        Boolean bOK
+        Get CurrentNodeIsNewFolder of oFolderTree  to bOK
+        If (not(bOK)) Begin
+            Get PrivatepbCanDeleteFolder to bOK
+            If (bOK) Begin
+                Get CurrentNodeIsFolder of oFolderTree to bOK
+            End
+        End
+        Function_Return bOK
+    End_Function
+
+    // EVents and Methods:
+    { MethodType=Event}
+    Procedure OnStoreDefaults
+        Integer iVal
+        String  sVal
+        Handle  hmVal
+        Boolean bVal
+
+        Get psTitle                       to sVal
+        Set psStoredTitle                 to sVal
+
+        Get psUserHint                    to sVal
+        Set psStoredUserHint              to sVal
+
+        Get pbShowEditBox                 to bVal
+        Set pbStoredShowEditBox           to bVal
+
+        Get psOKText                      to sVal
+        Set psStoredOkText                to sVal
+
+        Get pbNoNewFolder                 to bVal
+        Set pbStoredNoNewFolder           to bVal
+
+        Get pbCanRenameFolder             to bVal
+        Set pbStoredCanRenameFolder       to bVal
+
+        Get pbCanDeleteFolder             to bVal
+        Set pbStoredCanDeleteFolder       to bVal
+
+        Get psRootFolder                  to sVal
+        Set psStoredRootFolder            to sVal
+
+        Get peUpdateMode                  to iVal
+        Set peStoredUpdateMode            to iVal
+
+        Get pbAutoSeed                    to bVal
+        Set pbStoredAutoSeed              to bVal
+
+        Get phmPromptUpdateCallback       to hmVal
+        Set phmStoredPromptUpdateCallback to hmVal
+
+    End_Procedure 
+
+    { MethodType=Event}
+    Procedure OnRestoreDefaults
+        Integer iVal
+        String  sVal
+        Handle  hmVal
+        Boolean bVal
+
+        Get psStoredTitle                 to sVal
+        Set psTitle                       to sVal
+
+        Get psStoredUserHint              to sVal
+        Set psUserHint                    to sVal
+
+        Get pbStoredShowEditBox           to bVal
+        Set pbShowEditBox                 to bVal
+
+        Get psStoredOKText                to sVal
+        Set psOKText                      to sVal
+
+        Get pbStoredNoNewFolder           to bVal
+        Set pbNoNewFolder                 to bVal
+
+        Get pbStoredCanRenameFolder       to bVal
+        Set pbCanRenameFolder             to bVal
+
+        Get pbStoredCanDeleteFolder       to bVal
+        Set pbCanDeleteFolder             to bVal
+
+        Get psStoredRootFolder            to sVal
+        Set psRootFolder                  to sVal
+
+        Get peStoredUpdateMode            to iVal
+        Set peUpdateMode                  to iVal
+
+        Get pbStoredAutoSeed              to bVal
+        Set pbAutoSeed                    to bVal
+
+        Get phmStoredPromptUpdateCallback to hmVal
+        Set phmPromptUpdateCallback       to hmVal
+
+    End_Procedure
+
+    // If pbAutoSeed is true find the folder in psSeedValue if that is a valid folder
+    // otherwise the folder in psDefaultSeedValue if that is valid 
+    // otherwise start at the root folder
+    { MethodType=Event }
+    Procedure OnSeedData
+        String  sInitialFolder
+        Boolean bSeed
+        Handle  hItem
+        
+        Get psSeedValue to sInitialFolder
+        Get pbAutoSeed to bSeed
+        If (bSeed and sInitialFolder <> "") Begin
+            Get LocateFolder of oFolderTree sInitialFolder to hItem
+            If (hItem = 0) Begin
+                Get psDefaultSeedValue to sInitialFolder
+            End
+            Send LocateFolder to oFolderTree sInitialFolder
+        End
+    End_Procedure
+
+    { MethodType=Event }
+    Procedure OnMoveValueOutByValue
+        String sValue
+        Handle hoInvokingObject hoCol  hoDataSource
+        Integer iRow iCol
+        Integer[] SelRowsIndexes
+
+        Get phoInvokingObject to hoInvokingObject
+        Get psSelectedFolder to sValue
+        If (sValue <> "") Begin
+            Set Value of hoInvokingObject to sValue
+            Set Item_Changed_State of hoInvokingObject to True
+        End
+    End_Procedure
+
+    { MethodType=Event }
+    Procedure OnMoveValueOutByCustom
+    End_Procedure
+
+    // called before the list is activated. 
+    { Visibility=Private }
+    Procedure InitializePrompt
+        Integer eUpdateMode
+        String  sValue
+        Handle  hoInvokingObject
+
+        Get peUpdateMode to eUpdateMode
+        If (eUpdateMode = umPromptRelational) Begin    
+            // Programming error:
+            Error DFERR_PROGRAM "Dialog cannot be used as a relational prompt"
+        End
+        Else Begin
+            If (eUpdateMode <> umPromptNonInvoking) Begin
+                Get Focus of Desktop to hoInvokingObject
+                If (hoInvokingObject <= Desktop) Begin
+                    // Programming error:
+                    Error DFERR_PROGRAM "Prompt list has no invoking object"
+                End
+                Else Begin
+                    Set phoInvokingObject to hoInvokingObject
+                    Send Prompt_Callback to hoInvokingObject Self
+                    If (eUpdateMode = umPromptValue) Begin
+                        Get Value of hoInvokingObject to sValue
+                        Set psSeedValue to sValue
+                    End
+                End
+            End
+        End
+    End_Procedure 
+
+    // Called when TreeView is created and active. Load Data, seed TreeView, select start folder, etc.
+    { Visibility=Private }
+    Procedure LoadData
+        Send BuildTree to oFolderTree
+        Send OnSeedData // find a good starting place for the display
+    End_Procedure
+    
+    // This is only called in a successful close
+    { Visibility=Private }
+    Procedure ClosePromptList
+        Integer eUpdateMode
+        Integer[] SelRowsIndexes
+        Handle hoInvokingObject
+        Handle hmCallBack
+        
+        Get phoInvokingObject to hoInvokingObject
+        Set pbCanceled to False
+        Get peUpdateMode to eUpdateMode
+        // if non-invoking there is by definition no move value out
+        If (eUpdateMode <> umPromptNonInvoking) Begin
+            If (eUpdateMode = umPromptValue) Begin
+                Send OnMoveValueOutByValue
+            End
+            Else Begin
+                If (eUpdateMode = umPromptCustom) Begin
+                    Send OnMoveValueOutByCustom
+                End
+            End
+            Get phmPromptUpdateCallback to hmCallBack
+            If hmCallBack Begin
+                Send hmCallBack of hoInvokingObject Self
+            End
+        End
+
+        Send Close_Panel
+    End_Procedure
+
+    // Augment to send OnRestoreDefaults. This must happen after the object is deactivated
+    // so that the change in server will not do anything. This is called after remove_object
+    // which removes this DEO from the server.
+    { Visibility=Private }
+    Procedure Release_Focus
+        Integer eUpdateMode
+        
+        Get peUpdateMode to eUpdateMode
+        Forward Send Release_Focus
+        If (eUpdateMode <> umPromptNonInvoking) Begin
+            Send OnRestoreDefaults
+        End
+    End_Procedure
+
+    // Re-position the folder tree to allow for the Title text
+    { Visibility=Private }
+    Procedure MoveTree Integer iMoveBy
+        Integer iSize iLoc
+        Integer eOldAnchors
+
+        // Prevent the folder tree being resized when the dialog is resized:
+        Get peAnchors of oFolderTree      to eOldAnchors
+        Set peAnchors of oFolderTree      to anNone
+        Get Size to iSize
+        Set Size to (Hi(iSize) + iMoveBy) (Low(iSize))
+        Get Location of oFolderTree      to iLoc
+        Set Location of oFolderTree      to (Hi(iLoc) + iMoveBy) (Low(iLoc))
+        Get Location of oFolderNameForm  to iLoc
+        Set Location of oFolderNameForm  to (Hi(iLoc) + iMoveBy) (Low(iLoc))
+        Get Location of oUserHintTB      to iLoc
+        Set Location of oUserHintTB      to (Hi(iLoc) + iMoveBy) (Low(iLoc))
+        Get Location of oButtonContainer to iLoc
+        Set Location of oButtonContainer to (Hi(iLoc) + iMoveBy) (Low(iLoc))
+
+        // Reset the folder tree's anchors:
+        Set peAnchors        of oFolderTree to eOldAnchors
+        Set pbAnchorCreated  of oFolderTree to False
+        Send DoCreateAnchors of oFolderTree 0 0
+    End_Procedure
+
+    // Re-position the buttons to allow for the User Hint or Edit Box
+    { Visibility=Private }
+    Procedure MoveButtons Integer iMoveBy
+        Integer iSize iLoc
+        Integer eOldAnchors
+
+        // Prevent the folder tree being resized when the dialog is resized:
+        Get peAnchors of oFolderTree      to eOldAnchors
+        Set peAnchors of oFolderTree      to anNone
+
+        Get Size to iSize
+        Set Size to (Hi(iSize) + iMoveBy) (Low(iSize))
+        Get Location of oButtonContainer  to iLoc
+        Set Location of oButtonContainer  to (Hi(iLoc) + iMoveBy) (Low(iLoc))
+
+        // Reset the folder tree's anchors:
+        Set peAnchors        of oFolderTree to eOldAnchors
+        Set pbAnchorCreated  of oFolderTree to False
+        Send DoCreateAnchors of oFolderTree 0 0
+    End_Procedure
+
+    Procedure InvalidFolderError String sFolder
+        Send UserError (sFolder + CS_DFSPathNotExists) (Label(Self))
+    End_Procedure
+
+    { Visibility=Private }
+    Procedure Add_Focus Handle hoParent Returns Integer
+        Integer eMode
+        
+        Set pbCanceled       to True // assume cancel unless changed
+        Set psSelectedFolder to ""   // until one _is_ selected
+        Get peUpdateMode to eMode
+        If (eMode <> umPromptNonInvoking) Begin
+            Send OnStoreDefaults
+        End
+        Set Icon to "DFSBlank.ico"
+
+        Forward Send Add_Focus hoParent
+        Send LoadData
+        Set psSeedValue to ""
+    End_Procedure
+
+    // InitializePrompt is sent from the Add_Focus method in the 
+    // cCJGridPromptList class.  Because the Prompt_Callback method 
+    // might cause the dialog to be resized (if psTitle is set there 
+    // for example) we must send InitializePrompt from the PopUp method 
+    // otherwise the resize will not take place.
+    Procedure Popup
+        Send InitializePrompt
+        Forward Send Popup
+    End_Procedure
+
+    Procedure Ok Returns Integer
+        Handle hItem
+        String sFolderPath
+        Get CurrentTreeItem of oFolderTree to hItem
+        Get ItemFullPath of oFolderTree hItem to sFolderPath
+        Set psSelectedFolder to sFolderPath
+        Send ClosePromptList
+    End_Procedure
+
+    Procedure Cancel Returns Integer
+        Send Close_Panel
+    End_Procedure
+
+    Procedure Page Integer iPageObject
+        Forward Send Page iPageObject
+        Set Icon to "DFAddFolder.ico"
+    End_Procedure
+
+End_Class 

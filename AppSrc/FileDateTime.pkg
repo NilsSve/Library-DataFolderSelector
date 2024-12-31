@@ -1,0 +1,229 @@
+// 2019-12-18 NS. Converted for DF Next Gen (DF 20) to handle Unicode file names.
+//
+Use tWinStructs.pkg
+Use Winkern.pkg
+Use cWorkspace.pkg
+Use seq_chnl.pkg
+
+// This function formats the time in a picture-string passed
+//
+// Picture  Meaning
+//
+//    h     Hours with no leading zero for single-digit hours; 12-hour clock
+//    hh    Hours with leading zero for single-digit hours; 12-hour clock
+//    H     Hours with no leading zero for single-digit hours; 24-hour clock
+//    HH    Hours with leading zero for single-digit hours; 24-hour clock
+//    m     Minutes with no leading zero for single-digit minutes
+//    mm    Minutes with leading zero for single-digit minutes
+//    s     Seconds with no leading zero for single-digit seconds
+//    ss    Seconds with leading zero for single-digit seconds
+//    t     One character time marker string, such as A or P
+//    tt    Multicharacter time marker string, such as AM or PM
+//
+// For example, to get the time string
+//    "11:29:40 PM"
+// use the following picture string:
+//    "hh':'mm':'ss tt"
+External_Function GetTimeFormat "GetTimeFormatA" Kernel32.Dll ;
+   DWord LCID DWord dwFlags Pointer lpsSystemTime Pointer lpFormat Pointer lpTimeStr Integer cchTime Returns Integer
+
+// This function returns the time for the computer. It is the time of the clock shown in the taskbar of windows
+External_Function GetLocalTime "GetLocalTime" Kernel32.Dll ;
+   Pointer lpsSystemTime Returns Integer
+
+// This function returns the time in GreenWhich currently based on the local time and the timezone information
+External_Function GetSystemTime "GetSystemTime" Kernel32.Dll ;
+   Pointer lpsSystemTime Returns Integer
+
+// This function formats the date in a picture-string passed
+//
+// Picture  Meaning
+//
+//    d     Day of month as digits with no leading zero for single-digit days.
+//    dd    Day of month as digits with leading zero for single-digit days.
+//    ddd   Day of week as a three-letter abbreviation. The function uses the LOCALE_SABBREVDAYNAME value
+//          associated with the specified locale.
+//    dddd  Day of week as its full name. The function uses the LOCALE_SDAYNAME value associated with the
+//          specified locale.
+//    M     Month as digits with no leading zero for single-digit months.
+//    MM    Month as digits with leading zero for single-digit months.
+//    MMM   Month as a three-letter abbreviation. The function uses the LOCALE_SABBREVMONTHNAME value
+//          associated with the specified locale.
+//    MMMM  Month as its full name. The function uses the LOCALE_SMONTHNAME value associated with the
+//          specified locale.
+//    y     Year as last two digits, but with no leading zero for years less than 10.
+//    yy    Year as last two digits, but with leading zero for years less than 10.
+//    yyyy  Year represented by full four digits.
+//    gg    Period/era string. The function uses the CAL_SERASTRING value associated with the specified
+//          locale. This element is ignored if the date to be formatted does not have an associated era
+//          or period string.
+// For example, to get the date string
+//    "Wed, Aug 31 94"
+// use the following picture string:
+//    "ddd',' MMM dd yy"
+External_Function GetDateFormat "GetDateFormatA" Kernel32.Dll ;
+   DWord LCID DWord dwFlags Pointer lpsSystemTime Pointer lpFormat Pointer lpDateStr Integer cchDate Returns Integer
+
+#IFNDEF _struct_tWin32FindData
+Define MAX_ALTPATH for 14
+Struct tWin32FindData
+    DWord dwFileAttributes
+    tWinFileTime ftCreationTime
+    tWinFileTime ftLastAccessTime
+    tWinFileTime ftLastWriteTime
+    DWord nFileSizeHigh
+    DWord nFileSizeLow
+    DWord dwReserved0
+    DWord dwReserved1
+    Char[MAX_PATH] cFileName
+    Char[MAX_ALTPATH] cAlternateFileName
+End_Struct
+#ENDIF
+
+Struct tFileDateTime_FDT
+    String sFileName
+    DateTime dtCreated
+    DateTime dtLastAccessed
+    DateTime dtLastWrite
+    UInteger iAttributes
+End_Struct
+
+// lpFileTime     :pointer to file time to convert
+// lpSystemTime   :pointer to structure to receive system time
+External_Function FileTimeToSystemTime "FileTimeToSystemTime" Kernel32.Dll ;
+  Pointer lpFileTime Pointer lpSystemTime Returns Integer
+
+External_Function FileTimeToLocalFileTime "FileTimeToLocalFileTime" Kernel32.Dll ;
+   Pointer lpFileTime Pointer lpSystemTime Returns Integer
+
+// lpFileName      :address of name of file to search for
+// lpFindFileData  :address of returned information
+#IF (!@ < 200)
+External_Function FindFirstFile "FindFirstFileA" Kernel32.Dll ;
+   Pointer lpFileName Pointer lpFindFileData Returns Handle
+#ELSE
+External_Function FindFirstFile "FindFirstFileW" Kernel32.Dll ;
+   Pointer lpFileName Pointer lpFindFileData Returns Handle
+#ENDIF
+
+// hFindFile       :handle of search
+// lpFindFileData  :address of structure for data on found file
+#IF (!@ < 200)
+External_Function FindNextFile "FindNextFileA" Kernel32.Dll ;
+   Handle hFindFile Pointer lpFindFileData Returns Integer
+#ELSE
+External_Function FindNextFile "FindNextFileW" Kernel32.Dll ;
+   Handle hFindFile Pointer lpFindFileData Returns Integer
+#ENDIF
+
+// hFindFile       :file search handle
+External_Function FindClose "FindClose" Kernel32.Dll ;
+   Handle hFindFile Returns Integer
+
+Function ConvertDateTimeToSystemDateTime Global UInteger dwLowDateTime UInteger dwHighDateTime Returns DateTime
+    String sFormattedTime sFormattedDate
+    Integer iSuccess iDataLength
+    tWinSystemTime SystemTime
+    tWinFileTime FileTime
+    DateTime dtResult
+
+    Move dwLowDateTime  to FileTime.dwLowDateTime
+    Move dwHighDateTime to FileTime.dwHighDateTime
+
+    Move (FileTimeToSystemTime (AddressOf(FileTime), AddressOf(SystemTime))) to iSuccess
+    If (iSuccess <> 0) Begin
+        Move (Repeat(Character (0), 255)) to sFormattedTime
+        Move (GetTimeFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedTime), 255)) to iDataLength
+
+        Move (Repeat(Character(0), 255)) to sFormattedDate
+        Move (GetDateFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedDate), 255)) to iDataLength
+
+        Move (Cstring(sFormattedDate) * Cstring (sFormattedTime)) to dtResult
+    End
+
+    Function_Return dtResult
+End_Function
+
+// 2019-12-18 NS. Converted for DF Next Gen (DF 20) to handle Unicode file names.
+Function FileDateTime Global String sFilePath Returns tFileDateTime_FDT[]
+    Handle hFindFile
+    Integer iVoid iRetval iFile iSizeOfStructWithoutStrings
+    #IF (!@ < 200)
+        tWin32FindData Win32_Find_Data
+    #ELSE
+        tWin32FindData Win32_Find_Data
+        WString wFileName wPath  
+        String sFileName
+        Pointer pWin32FindData
+    #ENDIF
+    tFileDateTime_FDT[] aFileDateTime
+    tWinFileTime FileTime_Create FileTime_LastAccess FileTime_LastWrite
+    
+    #IF (!@ < 200)
+        Move (FindFirstFile(AddressOf(sFilePath), AddressOf(Win32_Find_Data))) to hFindFile
+    #ELSE
+        Move (AddressOf(Win32_Find_Data)) to pWin32FindData
+        Move sFilePath to wPath
+        Move (winFindFirstFile(wPath, pWin32FindData)) to hFindFile
+    #ENDIF
+    If (hFindFile <> INVALID_HANDLE_VALUE) Begin
+        Repeat                                    
+            #IF (!@ < 200)
+                Move (AddressOf(Win32_Find_Data.cFileName)) to aFileDateTime[iFile].sFileName
+            #ELSE
+                Move (PointerToWString(AddressOf(Win32_Find_Data.cFileName))) to wFileName
+                Move (CString(wFileName)) to aFileDateTime[iFile].sFileName   
+            #ENDIF
+           
+            Move Win32_Find_Data.dwFileAttributes to aFileDateTime[iFile].iAttributes   
+            Move Win32_Find_Data.ftCreationTime   to FileTime_Create
+            Move (ConvertDateTimeToSystemDateTime (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastWrite
+            Move Win32_Find_Data.ftCreationTime   to FileTime_LastAccess
+            Move (ConvertDateTimeToSystemDateTime (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastAccessed
+            Move Win32_Find_Data.ftLastWriteTime  to FileTime_LastWrite
+            Move (ConvertDateTimeToSystemDateTime (FileTime_LastWrite.dwLowDateTime, FileTime_LastWrite.dwHighDateTime)) to aFileDateTime[iFile].dtLastWrite
+            Increment iFile
+
+            #IF (!@ < 200)
+                Move (FindNextFile(hFindFile, AddressOf(Win32_Find_Data))) to iRetval
+            #ELSE
+                Move (winFindNextFileW(hFindFile, pWin32FindData)) to iRetval
+            #ENDIF
+            // If iRetval = false the function call failed but GetLastError fails to tell us if
+            // this was because we do not find any files anymore.
+        Until (not(iRetval))
+
+        Move (FindClose(hFindFile)) to iVoid
+    End
+
+    Function_Return aFileDateTime
+End_Function
+
+Define SDF_BOM_UTF8c1 for |CI$EF
+Define SDF_BOM_UTF8c2 for |CI$BB
+Define SDF_BOM_UTF8c3 for |CI$BF
+
+// Returns True if the file sFilename has a UTF8 BOM (Byte Order Mark) as the first three characters.
+Function HasBOMMarker Global String sFilename Returns Boolean
+    String sLine
+    Integer iCh
+    UChar[] aUchars
+    Boolean bBOM
+    
+    Move False to bBOM
+    Move (Seq_New_Channel()) to iCh
+    If (iCh <> DF_SEQ_CHANNEL_NOT_AVAILABLE) Begin
+        Direct_Input channel iCh sFilename
+        Readln sLine
+        Move (StringToUCharArray(sLine)) to aUchars
+        Send Seq_Close_Channel iCh
+        
+        If (SizeOfArray(aUchars) > 2) Begin
+            If (aUchars[0] = SDF_BOM_UTF8c1 and aUchars[1] = SDF_BOM_UTF8c2 and aUchars[2] = SDF_BOM_UTF8c3) Begin
+                Move True to bBOM
+            End
+        End
+    End
+    
+    Function_Return bBOM
+End_Function

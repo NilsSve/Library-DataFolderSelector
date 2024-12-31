@@ -1,0 +1,190 @@
+//*********************************************************************************************************
+//* By          : Pieter van Dieren
+//* Package Name: cdbFormHint.pkg
+//* Description : Subclass of the dbForm class which shows a hint in the form so the user knows what
+//*               kind of information needs to be entered.
+//*
+//*********************************************************************************************************
+Use DfEntry.pkg
+
+Class cDbFormHint is a dbForm
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        Property Boolean pbHintEnabled True
+        Property String  psHintText   ""
+        Property Handle  phoHintServer
+        Property Integer piHintField
+        Property Integer piHintColor clLtGray
+
+    End_Procedure
+
+    Procedure Activating
+        Forward Send Activating
+
+        Send DoSetProperties
+    End_Procedure
+
+    // Adds hint information to the properties.
+    {Visibility=Private}
+    Procedure DoSetProperties
+        Integer iField
+        String sLabel
+        Handle hServer
+
+        Get Data_Field Item 0 to iField
+        Get Server to hServer
+
+        If (hServer) Begin
+            Get psHintText    to sLabel
+            If (sLabel = "") Begin
+                Get Field_Label_Short of hServer iField to sLabel
+            End
+            Set psHintText    to sLabel
+            Set phoHintServer to hServer
+            Set piHintField   to iField
+        End
+    End_Procedure
+
+    {Visibility=Private}
+    // Is sent when the user makes changes.
+    // Corrects the Field_Changed_State otherwise it remains false.
+    Procedure OnUserChange
+        Set Field_Changed_State of (phoHintServer(Self)) (piHintField(Self)) to True
+    End_Procedure
+
+    // Command
+    // We need to know when the user changes something in the form.
+    // Can't use onchange for that, so we augment Command.
+    Procedure Command Integer wParam Integer lParam
+        Forward Send Command wParam lParam
+        If (Hi(wParam)) eq EN_CHANGE Begin
+            If (Focus(Desktop) = Self) Begin
+                Send OnUserChange
+            End
+        End
+    End_Procedure
+
+    {Visibility=Private}
+    Procedure DoChangeValue String sValue
+        Boolean bChangedStateServerBefore bChangedStateFormBefore bChangedStateFieldBefore
+
+        Get Changed_State                                                    to bChangedStateFormBefore
+        Get Changed_State       of (phoHintServer(Self))                     to bChangedStateServerBefore
+        Get Field_Changed_State of (phoHintServer(Self)) (piHintField(Self)) to bChangedStateFieldBefore
+
+        Set Value to sValue
+        If (not(bChangedStateFormBefore)) Begin
+            Set Changed_State                                                    to False
+        End
+        If (not(bChangedStateServerBefore)) Begin
+            Set Changed_State       of (phoHintServer(Self))                     to False
+        End
+        If (not(bChangedStateFieldBefore)) Begin
+            Set Field_Changed_State of (phoHintServer(Self)) (piHintField(Self)) to False
+        End
+        If (bChangedStateFieldBefore) Begin
+            If (sValue = psHintText(Self)) Begin
+                Set Field_Changed_State of (phoHintServer(Self)) (piHintField(Self)) to False
+            End
+        End
+
+    End_Procedure
+
+    // DoShowHint
+    // Shows the hint.
+    {Visibility=Private}
+    Procedure DoShowHint
+        String sValue
+
+        If (not(HasRecord(phoHintServer(Self)))) Begin
+            If (Focus(Desktop)<>Self) Begin
+                Get Value to sValue
+                If (sValue = "") Begin
+                    Send DoChangeValue (psHintText(Self))
+                    Set TextColor to (piHintColor(Self))
+                End
+            End
+        End
+
+    End_Procedure
+
+    // DoHideHint
+    // Hides the hint.
+    {Visibility=Private}
+    Procedure DoHideHint
+        Set TextColor to clWindowText
+
+        If (not(HasRecord(phoHintServer(Self)))) Begin
+            If (value(Self) = psHintText(Self)) Begin
+                Send DoChangeValue ""
+            End
+        End
+    End_Procedure
+
+    // When the field is being cleared, show the hint.
+    {Visibility=Private}
+    Procedure Entry_Clear Boolean bClearedFiles
+        Forward Send Entry_Clear bClearedFiles
+
+        If (pbHintEnabled(Self)) Begin
+            If (phoHintServer(Self)) Begin
+                If (HasRecord(phoHintServer(Self))) Begin
+                    Set TextColor to clWindowText
+                End
+                Else Begin
+                    Send DoShowHint
+                End
+            End
+        End
+
+    End_Procedure
+
+    Procedure OnEnterObject Handle hoFrom
+        Forward Send OnEnterObject hoFrom
+
+        If (pbHintEnabled(Self)) Begin
+            Send DoHideHint
+        End
+    End_Procedure
+
+    Procedure OnExitObject
+        Forward Send OnExitObject
+
+        If (pbHintEnabled(Self)) Begin
+            Send DoShowHint
+        End
+    End_Procedure
+
+    // Value
+    // Augment it to make sure the hint value is not returned.
+    Function Value Returns Integer
+        String sString
+
+        Forward Get Value to sString
+
+        If (pbHintEnabled(Self)) Begin
+            If (Focus(Desktop)<>Self) Begin
+                If (sString = psHintText(Self)) Begin
+                    Move "" to sString
+                End
+            End
+        End
+
+        Function_Return sString
+    End_Function
+
+    // Show_Item is located in the runtime and is being sent when the value of the form
+    // changes when the default_value is being set. The code below ensures that when
+    // things change, the textcolor is set to black again.
+    Procedure Show_Item Integer Arg1
+        Forward Send Show_Item Arg1
+
+        If (pbHintEnabled(Self)) Begin
+            If (Focus(Desktop) <> Self) Begin
+                Set TextColor to clWindowText
+            End
+        End
+    End_Procedure
+End_Class

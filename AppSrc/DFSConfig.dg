@@ -1,0 +1,262 @@
+//****************************************************************************
+// $Module type: Dialog
+// $Module name: DFSConfig.dg
+// $Author     : Nils Svedmyr, RDC Tools International, <mailto:support@rdctools.com>
+// Web-site    : http://www.rdctools.com
+// Created     : 2019-11-02 @ 09:33 (Military date format: YY-MM-DD)
+//
+// Purpose     : To provide rudimentory password protection to the "Data Folder Selector" project.
+//               Please see the general purpose access message: PopupDFSConfigdDialog to access
+//               the dialog at the bottom of this code.
+//
+// See Also    : Check out the SetupDataFolders.chm help file in the Help folder.
+//
+Use Windows.pkg
+Use Trckbr.pkg
+Use cDataFolderSelector.pkg
+
+Object oDFSConfig_dg is a ModalPanel
+    Set Label to "Configure the Program"
+    Set Location to 1 0
+    Set Size to 97 209
+    Set piMinSize to 75 184
+    Set Border_Style to Border_Normal
+    Set Locate_Mode to CENTER_ON_SCREEN
+    
+    Property String psPassword ""
+    Property Integer piFontSize 8
+    Property Boolean pbOK False
+    Property Boolean pbStartupMode False
+
+    Object oInfo_tb is a TextBox
+        Set Auto_Size_State to False
+        Set Size to 17 157
+        Set Location to 11 39
+        Set Label to "Password protect the start of this program"
+        Set Justification_Mode to JMode_Left
+    End_Object
+
+    Object oPwdForm is a Form
+        Set Label to "Password"
+        Set Label to CS_DFSPasswordText
+        Set Size to 12 75
+        Set Location to 33 72
+        Set Label_Col_Offset to 2
+        Set Label_Justification_Mode to JMode_Right
+        Set Password_State to True
+		Set peAnchors to anTopLeftRight
+
+        Procedure OnChange
+            String sValue
+            Get Value to sValue
+            Set psPassword to sValue
+        End_Procedure
+
+    End_Object
+
+    Object oFontZoom_tb is a TrackBar
+        Set Label to "Grid Font Size"
+        Set Size to 18 73
+        Set Location to 53 72
+        Set Status_Help to "Selects the zoom-factor (font size) to be used by the grid."
+        Set Maximum_Position to 16
+        Set Minimum_Position to 7
+        Set Tick_Frequency to 1
+        Set Tick_Orientation to tkBottom
+        Set Label_Col_Offset to 2
+        Set Label_Justification_Mode to JMode_Right
+
+        Property Boolean pbDontChange False
+
+        Procedure OnSetPosition Integer iVal
+            Integer iMax iMin
+            Boolean bDontChange
+
+            Get pbDontChange to bDontChange            // Controls re-entrance when object is activated.
+            If (bDontChange = True) Begin
+                Procedure_Return
+            End
+
+            Get Maximum_Position to iMax
+            Get Minimum_Position to iMin
+            If (iVal < iMin or iVal > iMax) Begin
+                Procedure_Return
+            End
+            Set piFontSize to iVal  
+            Set Value of oSize_fm to iVal
+            Set pbDontChange to False
+        End_Procedure
+
+        // Do at program startup.
+        Procedure Activating
+            Integer iVal
+            Get ReadString of (oDataFolderSelector(Self)) CS_DFSSettings CS_DFSGridFontSize 8 to iVal
+            Set pbDontChange to True
+            Set Value to iVal
+            Set pbDontChange to False
+        End_Procedure
+
+    End_Object
+
+    Object oSize_fm is a Form
+        Set Size to 14 16
+        Set Location to 53 151
+        Set Label to "Size"
+        Set Label_Row_Offset to 1
+        Set Label_Col_Offset to -2
+        Set Label_Justification_Mode to JMode_Top
+        Set Form_Datatype to 0
+        Set Enabled_State to False
+    End_Object
+
+    Object oOK_btn is a Button
+        Set Label to C_$OK
+        Set Location to 76 96
+        Set Default_State to True
+
+        Procedure OnClick
+            Set pbOK to True
+            Send Close_Panel
+        End_Procedure
+    End_Object
+
+    Object oCancel_btn is a Button
+        Set Label to "&Cancel"
+        Set Location to 76 151
+
+        Procedure OnClick
+            Set pbOK to False
+            Send Close_Panel
+        End_Procedure
+    End_Object
+
+    Procedure Popup
+        Boolean bStartupMode
+        String sPassword
+        
+        Get pbStartupMode to bStartupMode
+        If (bStartupMode = True) Begin    
+            Set Locate_Mode to CENTER_ON_SCREEN
+            Set Label             to CS_DFSPasswordText
+            Set Label of oInfo_tb to CS_DFSConfigurePwText 
+            Set Visible_State     of oFontZoom_tb to False
+            Set Visible_State     of oSize_fm     to False
+        End
+        Else Begin
+            Set Locate_Mode to CENTER_ON_PARENT
+            Set Label             to CS_DFSConfigureTextHelp
+            Set Label of oInfo_tb to CS_DFSPasswordHelp
+            Get psPassword        to sPassword
+            Set Value of oPwdForm to sPassword
+            Set Visible_State     of oFontZoom_tb to True
+            Set Visible_State     of oSize_fm     to True
+        End
+
+        Forward Send Popup
+    End_Procedure
+
+    Procedure Page Integer iPageObject
+        Forward Send Page iPageObject
+        Set Icon to "DFSConfigure.ico"
+    End_Procedure
+
+    On_Key Key_Alt+Key_O Send KeyAction of oOk_btn
+    On_Key Key_Alt+Key_C Send KeyAction of oCancel_btn
+    On_Key kCancel       Send KeyAction of oCancel_btn
+End_Object
+
+// General purpose access message for the oDFSConfig_dg dialog.
+// Returns one of CI_DFSPasswordOK, CI_DFSPasswordErr or CI_DFSPasswordCancel.  
+// Note: The first time the SetupDataFolder program is run with an "empty" ini-file, it will ask 
+//       for a password. The password used is the default psAppDefaultPw property (= "john" 
+//       until it is changed - and you should!)  
+// bStartupMode is passed as True, when the program is started and a password has been set. 
+// Note: The dialog serves two purposes;
+//       a) As a program property dialog
+//       b) As a password dialog to show when the SetupDataFolders.src program is started,
+//          if a password has been set for the program.
+Function PopupDFSConfigDialog Boolean bStartupMode Returns Integer
+    Handle ho
+    String sPassword sCurrentPw sDefaultAppPw
+    Boolean bOK bIniFileExists bMode
+    Integer iFontSize iRetval
+    
+    Move "" to sCurrentPw
+    Move "" to sPassword              
+    Get psAppDefaultPw of ghoDFSFolderSelector to sDefaultAppPw
+    Get IsIniFile of ghoDFSFolderSelector to bIniFileExists
+    
+    // If thee ini-file is missing/was deleted, we will show the password dialog (the default application 
+    // password "john" is then used (which should be changed in the class code).
+    If (bIniFileExists = True) Begin
+        Get ReadString of ghoDFSFolderSelector CS_DFSSettings CS_DFSIniFilePassword "" to sCurrentPw
+        Get DecryptPassword of ghoDFSFolderSelector sCurrentPw to sCurrentPw
+    End
+
+    If (bStartupMode = True) Begin
+        If (sDefaultAppPw = sCurrentPw) Begin
+            Function_Return CI_DFSPasswordOK
+        End
+    End
+
+    Move (oDFSConfig_dg(Self)) to ho
+    If (bStartupMode = False) Begin
+        Set Locate_Mode of ho to CENTER_ON_PARENT
+    End                                
+    Else Begin
+        Set Locate_Mode of ho to CENTER_ON_SCREEN
+    End                                     
+    // If the dialog was popup from the toolbar and an application password has
+    // been set, we show asterisks (****) in the password form to denote that
+    // there is a password in effect.
+    If (sDefaultAppPw <> sCurrentPw and bStartupMode = False) Begin
+        Set psPassword of ho to sCurrentPw
+    End
+    Else Begin
+        Set psPassword of ho to ""
+    End
+    Set pbStartupMode of ho to bStartupMode
+    Set pbOK          of ho to False
+    
+    // Popup dialog!
+    Send Popup of ho
+
+    // OK button was pressed?
+    Get pbOK of ho to bOK
+    If (bOK = True) Begin   
+        Get psPassword of ho to sPassword
+        If (bStartupMode = True) Begin                                                      
+            // If this is the first time the dialog is shown, create the .ini file
+            If (sDefaultAppPw = sPassword and bIniFileExists = False) Begin
+                Get EncryptPassword of ghoDFSFolderSelector sPassword to sPassword
+                Send WriteString of ghoDFSFolderSelector CS_DFSSettings CS_DFSIniFilePassword sPassword
+                Function_Return CI_DFSPasswordOK
+            End
+            If (sCurrentPw = sPassword or sDefaultAppPw = sPassword) Begin
+                Move CI_DFSPasswordOK to iRetval
+            End
+            Else Begin
+                Move CI_DFSPasswordErr to iRetval
+            End
+        End
+        Else Begin
+            If (sCurrentPw <> sPassword) Begin
+                If (sPassword = "") Begin
+                    // If no password was set we will write the default app pw to the ini-file.
+                    Move sDefaultAppPw to sPassword
+                End
+                Get EncryptPassword of ghoDFSFolderSelector sPassword to sPassword
+                Send WriteString of ghoDFSFolderSelector CS_DFSSettings CS_DFSIniFilePassword sPassword
+            End  
+            Get piFontSize of ho to iFontSize
+            Send WriteString of ghoDFSFolderSelector CS_DFSSettings CS_DFSGridFontSize iFontSize
+            Move CI_DFSPasswordOK to iRetval
+        End
+    End                          
+    // Cancel was selected
+    Else Begin
+        Move CI_DFSPasswordCancel to iRetval
+    End
+
+    Function_Return iRetval
+End_Function

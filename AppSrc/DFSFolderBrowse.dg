@@ -1,0 +1,62 @@
+// DFSFolderBrowse.dg
+//
+Use An_FolderBrowse.pkg
+
+#IFNDEF ghoDFSFolderSelectorDialog
+    Global_Variable Handle ghoDFSFolderSelectorDialog
+#ENDIF                                                
+
+{ DesignTime=False }
+Object oFolderSelectorDialog is an An_FolderBrowseDialog
+    Set Size to 200 191
+    Set pbShowEditBox     to True
+    Set pbCanDeleteFolder to True
+    Move Self to ghoDFSFolderSelectorDialog
+    
+    Function SelectFolder String sTitle Boolean bNoNewFolder Returns String
+        String sSelectedFolder
+
+        Set peUpdateMode to umPromptNonInvoking
+        If (num_arguments > 0) Begin
+            Set psTitle to sTitle
+        End
+        If (num_arguments > 1) Begin
+            Set pbNoNewFolder to (not(bNoNewFolder))
+        End
+
+        Send Popup
+
+        Get psSelectedFolder to sSelectedFolder
+        Function_Return sSelectedFolder
+    End_Function    
+
+    Function SelectFolder2 String sTitle String sInitFolder Boolean bUpdateMode Boolean bNoNewFolder Returns String
+        String sSelectedFolder
+        If (num_arguments > 0) Begin
+            Set psTitle to sTitle
+        End
+        If (num_arguments > 1) Begin
+           If (sInitFolder <> "") Begin
+                Set pbAutoSeed to True
+                Set psSeedValue to sInitFolder
+           End
+        End
+        If (num_arguments > 2) Begin
+            Set peUpdateMode to bUpdateMode
+        End
+        If (num_arguments > 3) Begin
+            Set pbNoNewFolder to (not(bNoNewFolder))
+        End
+
+        Send Popup
+
+        Get psSelectedFolder to sSelectedFolder
+        Function_Return sSelectedFolder
+    End_Function  
+
+    Procedure Page Integer iPageObject
+        Forward Send Page iPageObject
+        Set Icon to "DFSAddFolder.ico"
+    End_Procedure
+End_Object
+

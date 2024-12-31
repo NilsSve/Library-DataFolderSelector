@@ -1,0 +1,372 @@
+//****************************************************************************
+// $Module type: Class Package
+// $Module name: DFSDFADlg.pkg
+// $Author     : Nils Svedmyr, RDC Tools International, <mailto:support@rdctools.com>
+// Web-site    : http://www.rdctools.com
+// Created     : 2019-10-27 @ 09:33 (Military date format: YY-MM-DD)
+//
+// Purpose     : A utility for adding Data folders to an ini-file
+//               (DataFolderSelector.ini)
+// See Also    : Check out the SetupDataFolders.chm help file in the Help folder.
+//
+// This is an augmented DataAccess Worldwide standard package (DFAdlg.pkg)
+//               Changed behaviour to automatically save size and location when used
+//               as a popup_modal.
+//
+Use LanguageText.pkg
+Use Windows.pkg
+Use dfConfrm.pkg
+Use GlobalFunctionsProcedures.pkg
+Use tWinStructs.pkg
+
+{ ClassType=Abstract }
+{ HelpTopic=AppDialog }
+{ ComponentType=VWClass }
+Class cDFSAppDialog is a MdiDialog
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        // This can be used to stop this view from loading and saving its environment.
+        { Category=Behavior }
+        Property Boolean pbDisableSaveEnvironment False
+
+        // set true to auto-activate the view. This does not work if the object is deferred.
+        // this is a design time property which is applied during end_construct_object. This should
+        { Category=Access }
+        Property Boolean pbAutoActivate False
+
+        // used to keep track of window placment when deactivated object is reactivated.
+        { Visibility=Private }
+        Property tWinWindowPlacement pWindowPlacement
+        Property String Private_Icon
+
+    End_Procedure
+
+    Procedure End_Construct_Object
+        Boolean bAutoActivate
+
+        Forward Send End_Construct_Object
+
+        // if auto-activate, add this to he the panel's array of objects to be acivated.
+        Get pbAutoActivate to bAutoActivate
+        If bAutoActivate Begin
+            Delegate Send AddAutoActivateView Self
+        End
+    End_Procedure
+
+    Procedure Set Icon String sIcon
+        Forward Set Icon to sIcon
+        Set Private_Icon to sIcon
+    End_Procedure
+
+    Function Icon Returns String
+        String sIcon
+        Get Private_Icon to sIcon
+        Function_Return sIcon
+    End_Function
+
+    { MethodType=Event  NoDoc=True }
+    Procedure Destroy_Object
+        Integer obj
+        Move Self to obj
+//        Delegate Send Remove_Mdi_Dialog obj
+        Forward Send Destroy_Object
+    End_Procedure
+
+    // Augmented to save view position
+    { MethodType=Event }
+    Procedure Notify_Exit_Application
+        Send Save_Environment
+    End_Procedure
+
+    { MethodType=Property Visibility=Private }
+    Function View_Changed Returns Integer
+    End_Function
+
+    // Augment exit_application_check to see if view is changed. If changed,
+    // display exit message as required
+    { MethodType=Event }
+    Function Verify_Exit_Application Returns Integer
+        Integer iFail
+        Get View_Changed to iFail // Ask for changes in Data-sets
+        // ok a change exist...activate changed view.
+        If iFail Begin
+            Get Confirm (SFormat(C_$ChangesExistExit, Label(Self)) ) to iFail
+        End
+        Function_Return iFail
+    End_Function
+
+    // Activates the view. If view is minimized it restores it first
+    // works with both popup_state T and F
+
+    Procedure Activate_View Returns Integer
+        Integer rVal
+        If ( View_mode(Self) = VIEWMODE_ICONIZE ) Begin
+            Set view_mode to viewmode_normal
+        End
+        If (Popup_state(Self)) Begin
+            Get Msg_Popup to rVal
+        End
+        Else Begin
+            Get Msg_Activate to rVal
+        End
+        Procedure_Return rVal
+    End_Procedure
+
+    // Augmented to load last view position
+    { NoDoc=True }
+    Procedure Add_Focus Integer hoBase Returns Integer
+        Integer iRetVal bState
+        Get Visible_State to bState
+        Set Visible_State to False
+        Forward Get Msg_Add_Focus hoBase to iRetVal
+        If (iRetVal = 0) Begin
+            Send Load_Environment
+        End
+        Set Visible_State to bState
+        Procedure_Return iRetVal
+    End_Procedure
+
+    // This is augmented to send save_environment during a view close (was in close_panel)
+    // we set view_mode to normal if it is zoomed. This is needed to make the MDI stuff work
+    // properly with the save/load environment. The Saved environment data will make it zoom if needed.
+    //
+    { NoDoc=True }
+    Procedure Deactivate Integer eDeactivateScope Returns Integer
+        Integer eArea iFail
+        Boolean bPreserveEnvironment
+
+        Move (If(num_arguments = 0, Area_Type, eDeactivateScope)) to eArea // in case no param is passed
+        If (eArea <> 0) Begin
+            Forward Get msg_deactivate eArea to iFail
+        End
+        Else Begin
+            Send Save_Environment
+            Forward Get msg_deactivate eArea to iFail
+
+            // this works around a problem where maximized MDI views get saved but don't come back
+            // correctly when loaded again without exiting. It turns out the the MDI client restores
+            // the view sometimes without telling view_mode. If view_mode is normal, it always works.
+            // This must happen after the view is deactivated!
+            If ghoApplication Begin
+                Get pbPreserveEnvironment of ghoApplication to bPreserveEnvironment
+            End
+            // do these checks to have as small of an effect as possible.
+            If (bPreserveEnvironment and iFail = 0 and View_Mode(Self) = Viewmode_Zoom) Begin
+                Set View_Mode to Viewmode_Normal
+            End
+        End
+        Procedure_Return iFail
+    End_Procedure
+
+    // Save the window placement information for this to the application object
+
+    { Visibility=Private }
+    Procedure Save_Environment
+        tWinWindowPlacement WindowPlacement
+        Boolean bSuccess bCancel
+
+        Get pbDisableSaveEnvironment to bCancel
+        If not bCancel Begin
+            // Save environment to the object, in case it is reactivated during the same run.
+            Move (SizeOfType(tWinWindowPlacement)) to WindowPlacement.length
+            Move (GetWindowPlacement(Window_Handle(Self), addressof(WindowPlacement))) to bSuccess
+            If bSuccess Begin
+                // If minimized, assume restored, as we don't want to restart minimized!
+                If (WindowPlacement.showCmd = SW_SHOWMINIMIZED) Begin
+                    Move SW_SHOWNORMAL to WindowPlacement.showCmd
+                End
+                Set pWindowPlacement to WindowPlacement
+            End
+            // Also save environment to the application object, so it can be used when reloaded
+            If ghoApplication Begin
+                Send DoSaveEnvironment of ghoApplication Self False
+            End
+        End
+    End_Procedure
+
+    // Load the window placement information for this from the application object
+
+    Procedure Load_Environment
+        tWinWindowPlacement WindowPlacement
+        Boolean bSuccess bCancel
+        Get pbDisableSaveEnvironment to bCancel
+        If not bCancel Begin
+            // if view has alrady been activated and deactivated use the setting from windowplacement saved in the object
+            Get pWindowPlacement to WindowPlacement
+            //  if length is zero, assume it has never been used before (never deactivated).
+            If (WindowPlacement.length>0) Begin
+                Move (SetWindowPlacement(Window_Handle(Self), AddressOf(WindowPlacement))) to bSuccess
+            End
+            Else Begin
+                If ghoApplication Begin
+                    Send DoLoadEnvironment of ghoApplication Self False
+                End
+            End
+        End
+    End_Procedure
+
+    { MethodType=Event  NoDoc=True }
+    Procedure Entering_Scope Returns Integer
+        Integer rVal
+        Forward Get MSG_Entering_Scope to rVal
+        If not rVal Begin
+            Send Show_View_Name (Label(Self))
+        End
+    End_Procedure
+
+    { MethodType=Event  NoDoc=True }
+    Procedure Exiting_Scope Integer whereto Returns Integer
+        Integer rVal
+        Forward Get MSG_Exiting_Scope whereto to rVal
+        If not rVal Begin
+            Send Show_View_Name ''
+        End
+    End_Procedure
+
+    { Visibility=Private }
+    Procedure Show_View_Name String sHelp
+        Integer Id
+        Get Statusbar_id to id
+        If Id Begin
+            Send Show_View_Name to Id sHelp
+        End
+    End_Procedure   
+    
+    Function Statusbar_id Returns Handle
+        Function_Return 0
+    End_Function
+
+    // Force object to be modal and then pop it up. Upon complettion restore it to a normal view
+    Procedure Popup_Modal Returns Integer
+        Integer OldBMS OldAPS OldPS OldRS OldSS OldMDIState
+        Integer OldLoc OldAutoLoc OldKeyPath OldDisableSaveEnv OldMin OldMax
+        Integer rVal
+
+        // If object is active we can't do anything. -1 means already active
+        If (Active_State(Self)) Begin
+            Procedure_Return -1
+        End
+
+        // Remember all important modal property settings.
+        Get Block_mouse_State to OldBMS
+        Get Attach_parent_State to OldAPS
+        Get Popup_State to OldPS
+        Get Ring_State to OldRS
+        Get Scope_State to OldSS
+        Get MDI_State to OldMDIState
+        Get Key_Path to OldKeyPath
+        Get Location to OldLoc
+        Get Maximize_Icon to OldMax
+        Get Minimize_Icon to OldMin
+        Get Auto_Locate_State to OldAutoLoc
+        Get pbDisableSaveEnvironment to OldDisableSaveEnv
+
+        Set pbDisableSaveEnvironment to False
+        Set MDI_State to False
+        Set Auto_Locate_State to True
+        Set Key_path to Desktop
+        Set Block_mouse_state to True
+        Set Attach_parent_state to False
+        Set Popup_State to True
+        Set Ring_State to True
+        Set Scope_State to True
+        Set Minimize_Icon to False
+        Set Maximize_Icon to False
+
+        Get Msg_Popup to rVal
+        If rval Begin
+            Move -2 to rVal      // did not activate
+        End
+        Else Begin
+            Move StrMark to rVal // StrMark keeps track of UI value
+        End
+
+        // If 0- a stop_ui, if > 0, ret value
+        // restore all expected properties
+        Set Auto_Locate_State to OldAutoLoc
+        Set Location to (hi(OldLoc)) (Low(OldLoc))
+        Set pbDisableSaveEnvironment to OldDisableSaveEnv
+        Set MDI_State to OldMDIState
+        Set Maximize_Icon to OldMax
+        Set Minimize_Icon to OldMin
+        Set Block_mouse_State   to OldBMS
+        Set Attach_parent_State to OldAPS
+        Set Popup_State         to OldPS
+        Set Ring_State          to OldRS
+        Set Scope_State         to OldSS
+
+        Procedure_Return rVal
+    End_Procedure
+
+    Procedure Page Integer iPageObject
+        String sIcon
+
+        Forward Send Page iPageObject
+        Get Private_Icon to sIcon
+        If (sIcon <> "") Begin
+            Set Icon to sIcon
+        End
+    End_Procedure
+
+End_Class
+
+// logically this is required
+//{ DesignerClass=cDTView }
+{ HelpTopic=View }
+Class cDFSView is an cDFSAppDialog
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        Set Border_Style to Border_Thick
+        Set Locate_Mode to CENTER_ON_SCREEN
+        Set Popup_State to True
+        Set pbDisableSaveEnvironment to False
+        Set Icon to "DFSSetupDataFoldersDb2.ico"
+        Set pbAcceptDropFiles to True
+    
+        // If True, the grid will be filled with existing Data folder names,
+        // iif (If-and-only-If) the ini-file is missing or empty.
+        { Visibility=Public }
+        Property Boolean pbAutoFillDataFolders True
+        // If true the "Edit" button will be available for the end-user
+        // to edit the ini-file with the SetupDataFolders program.
+        // The grid will be refreshed upon return from the program
+        // True (means the button is visible)
+        { Visibility=Public }
+        Property Boolean pbEditAllowed True
+        
+        { Visibility=Public }
+        // Default = True means the DFSPassword dialog is to be used. 
+        // If = False, there will be *no* password question even if one has been
+        //      entered in the "grid" (ini-file).
+        Property Boolean pbUsePasswordDialog True
+        
+        // Set this to True if you would like to have the SetupDataFolder program
+        // to popup at the top of this dialog. (pbEditAllowed must be True!)
+        { Visibility=Public }
+        Property Boolean pbEditAutolocate True
+    
+        // Needed for internal logic if the upper-right-corner "X" is pressed (See Close_Panel).
+        { Visibility=Private }
+        Property Boolean pbCloseOK False
+        
+        // Will contain the Data folder name after a selection,
+        // if needed.
+        { DesignTime=False Visibility=Public }
+        Property String psSelectedDataFolder ""   
+    
+        // Will contain the Description column value after a selection of a Data folder,
+        // if needed. See also the OnStartup event near the end of this file.
+        { DesignTime=False Visibility=Public }
+        Property String psSelectedDescription ""   
+    
+        { Visibility=Public }
+        // Default = True means the name of the ini-file used for the dialog is shown at
+        // the bottom of the dialog.
+        Property Boolean pbShowIniFileName True
+
+    End_Procedure
+End_Class
+

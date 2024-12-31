@@ -1,0 +1,769 @@
+//****************************************************************************
+// $Module type: Dialog
+// $Module name: DataFolderSelector.dg
+// $Author     : Nils Svedmyr, RDC Tools International, <mailto:support@rdctools.com>
+// Web-site    : http://www.rdctools.com
+// Created     : 2019-10-27 @ 09:33 (Military date format: YY-MM-DD)
+//
+// Purpose     : A utility for adding Data folders to an ini-file
+//               (DataFolderSelector.ini), that can be selected by a user when a program is started.
+// See Also    : Check out the SetupDataFolders.chm help file in the Help folder.
+//
+Use Windows.pkg
+Use cCJGrid.pkg
+Use cCJGridColumnRowIndicator.pkg
+Use cCJGridColumn.pkg
+Use Cursor.pkg
+Use cDFSDialog.pkg
+Use cDataFolderSelector.pkg
+Use DFSFolderBrowse.dg
+Use DFSPassword.dg
+Use DFSConfig.dg
+
+Global_Variable Handle ghoDFSDataFolderSelector
+
+Object oDFSDataFolderSelector_vw is a cDFSView
+    Set Size to 202 351
+    Set piMinSize to 127 267
+    Set Location to 2 2
+    Set Label to CS_DFSSelectDataFolder        
+    Move Self to ghoDFSDataFolderSelector
+    
+    // We need this object here for the grid header right-click "Field Selector" to work.
+    Object oCommandBarSystem is a cCJCommandBarSystem
+        Move Self to ghoCommandBars
+    End_Object
+    
+    Object oDFSDataFolderSelector_grd is a cCJGrid
+        Set Size to 141 324
+        Set Location to 25 10
+        Set peAnchors to anAll
+        Set pbShowRowFocus to True
+        Set pbUseAlternateRowBackgroundColor to True
+        Set pbSelectionEnable to True
+        Set pbRestoreLayout to True
+        Set pbShowFooter to True
+        Set pbAllowAppendRow to False
+        Set pbAllowEdit to False
+        Set pbAllowInsertRow to False
+        Set pbAutoAppend to False
+        Set pbEditOnTyping to False
+        Set psLayoutSection to "oDFSDataFolderSelector_grd"
+        Set peTooltipStyle to xtpToolTipOffice2013
+        Set piLayoutBuild to 4
+        Set pbHeaderReorders to True
+        Set pbHeaderTogglesDirection to True
+
+        Object oCJGridColumnRowIndicator is a cCJGridColumnRowIndicator
+            Set piWidth to 30
+        End_Object
+
+        Object oDescription_col is a cCJGridColumn
+            Set piWidth to 248
+            Set psCaption to "Description"
+            Set psCaption to CS_DFSDescription
+
+            Procedure OnSetDisplayMetrics Handle hoMetrics Integer iRow String ByRef sValue
+                Boolean bIsValid      
+                String sDataFolder
+                
+                Get RowDataFolder iRow to sDataFolder
+                Get IsDataFolderValid of ghoDFSFolderSelector sDataFolder to bIsValid
+                If (bIsValid = False) Begin
+                    Set ComForeColor of hoMetrics to clRed
+                End
+            End_Procedure
+
+            // Uncomment the next line to hide the Description column;
+//            Set pbVisible to False
+        End_Object
+
+        Object oDataFolder_col is a cCJGridColumn
+            Set piWidth to 262
+            Set psCaption to "Data Folder"
+            Set psCaption to CS_DFSDataFolder    
+
+            Procedure OnSetDisplayMetrics Handle hoMetrics Integer iRow String ByRef sValue
+                Boolean bIsValid
+                
+                Get IsDataFolderValid of ghoDFSFolderSelector sValue to bIsValid
+                If (bIsValid = False) Begin
+                    Set ComForeColor of hoMetrics to clRed
+                End
+            End_Procedure
+
+        End_Object
+
+        Procedure LoadData
+            Handle hoDataSource 
+            tDFSDataFolders[] aDataFolders
+            tDFSDataFolders TheDataFolder
+            Integer iSize iCount iData_col iDescription_col iItem iSelectedRow
+            tDataSourceRow[] TheData
+            tDataSourceRow TheRow  
+            Boolean bSelected bIsValid bOK 
+            String sLastDataFolder   // Added by CT
+            
+            Move False to bOK
+            Move 0  to iSelectedRow
+            Get piColumnId of oDescription_col to iDescription_col
+            Get piColumnId of oDataFolder_col  to iData_col
+            Get phoDataSource to hoDataSource
+            Send Reset of hoDataSource
+
+            Get ReadDataFoldersFromIniFile of ghoDFSFolderSelector  to aDataFolders
+            Move (SizeOfArray(aDataFolders)) to iSize
+            If (iSize = 0 and (pbAutoFillDataFolders(Self) = True)) Begin
+                Get ReadWorkspaceFolders of ghoDFSFolderSelector to aDataFolders
+                Get WorkspaceFoldersActive aDataFolders to aDataFolders
+                Move (SizeOfArray(aDataFolders)) to iSize
+            End              
+            
+            Decrement iSize
+            Move 0 to iItem
+            Move -1 to iSelectedRow   // CT, Added 2020-05-31
+            For iCount from 0 to iSize
+                If (aDataFolders[iCount].bActive = True) Begin
+                    Move aDataFolders[iCount].sDataFolder  to TheRow.sValue[iData_col]
+                    Move aDataFolders[iCount].sDescription to TheRow.sValue[iDescription_col] 
+                    Move aDataFolders[iCount].bSelected    to bSelected
+                    Move aDataFolders[iCount].bIsValid     to bIsValid
+                    If (bSelected = True and bIsValid = True) Begin
+                        Move iItem to iSelectedRow   
+                        Move True to bOK
+                    End
+                    Move TheRow to TheData[iItem]
+                    Increment iItem
+                End
+            Loop
+            // lines added by CT 2020-05-31
+            // Adds the last used folder if not allready in the list
+            If (iSelectedRow = -1) Begin
+               Get LastUsedDataFolder of ghoDFSFolderSelector to sLastDataFolder        
+               If (IsDataFolderValid(ghoDFSFolderSelector,sLastDataFolder)) Begin
+                  Move sLastDataFolder to TheRow.sValue[iData_col]
+                  Move "" to TheRow.sValue[iDescription_col]
+                  Move True to bOK
+                  Move iItem to iSelectedRow
+                  Move TheRow to TheData[iItem]   
+               End
+            End
+            
+            // Initialize Grid with new data
+            Send InitializeData TheData
+            Set psFooterText of oDescription_col to (CS_DFSNoOfFolders * String(iItem))
+            // If bOK = false it means that the previously selected folder is invalid.
+            // This could be the top one row, in case we would not see the red text color.
+            // Instad find the first valid folder name and hightlight it in the grid.
+            If (bOK = False) Begin
+                Get FirstValidFolder of ghoDFSFolderSelector to TheDataFolder.sDataFolder
+                Move (SearchArray(TheDataFolder, aDataFolders)) to iSelectedRow
+            End
+            Send MoveToRow iSelectedRow
+        End_Procedure
+
+        Function WorkspaceFoldersActive tDFSDataFolders[] aDataFolders Returns tDFSDataFolders[]
+            Integer iSize iCount
+            Move (SizeOfArray(aDataFolders)) to iSize
+            Decrement iSize
+            For iCount from 0 to iSize
+                Move True to aDataFolders[iCount].bActive
+            Loop
+            Function_Return aDataFolders
+        End_Procedure
+
+        // Called when the grid object is created:
+        Procedure Activating
+            Forward Send Activating  
+            Send DoChangeFontSize
+            Send LoadData
+        End_Procedure
+
+        Procedure DoChangeFontSize
+            Handle hoFont hoPaintManager
+            Variant vFont
+            String sFont sFontSize
+            Boolean bCreated
+            Integer iVal
+
+            Get IsComObjectCreated to bCreated  // When program is started, grid object isn't created yet.
+            If (bCreated = False) Begin
+                Procedure_Return
+            End
+
+            Get phoReportPaintManager to hoPaintManager
+            Get Create (RefClass(cComStdFont)) to hoFont  // Create a font object
+            Get ComTextFont of hoPaintManager to vFont    // Bind the font object to the Grid's text font
+            Set pvComObject of hoFont to vFont            // Connect DataFlex object with com object
+
+            Get ReadString of ghoDFSFolderSelector CS_DFSSettings CS_DFSGridFontSize 8 to iVal
+            Set ComSize of hoFont to iVal
+            Send ComRedraw
+            Send Destroy to hoFont                        // Destroy the font object (releases memory)
+        End_Procedure
+
+        // We kill this event as it gives runtime errors as the
+        // CodeJock menu system isn't activated yet.
+//        Procedure OnHeaderRightClick Integer iCol
+//        End_Procedure
+
+        Procedure OnComRowDblClick Variant llRow Variant llItem
+            Forward Send OnComRowDblClick llRow llItem
+            Send KeyAction of oOK_Btn
+        End_Procedure
+
+        Procedure OnEnterKey
+            Forward Send OnEnterKey
+            Send KeyAction of oOK_Btn
+        End_Procedure
+
+        Procedure OnEscKey
+            Forward Send OnEscKey
+            Send OnClick of oCancel_Btn
+        End_Procedure
+
+        // Returns the current Data folder.
+        Function SelectedDataFolder Returns String
+            Integer iCol
+            String sDataFolder
+            Get piColumnId of oDataFolder_col to iCol
+            Get DataValue iCol to sDataFolder
+            Function_Return sDataFolder
+        End_Function
+
+        // Returns the current Description value.
+        Function SelectedDescription Returns String
+            Integer iCol
+            String sDescription
+            Get piColumnId of oDescription_col to iCol
+            Get DataValue iCol to sDescription
+            Function_Return sDescription
+        End_Function
+
+        Function DataValue Integer iCol Returns String
+            tDataSourceRow[] RowData
+            Integer iRow
+            String sValue
+            Handle hoDataSource
+
+            Move "" to sValue
+            Get phoDataSource to hoDataSource
+            Get SelectedRow   of hoDataSource to iRow
+            Get DataSource    of hoDataSource to RowData
+            If (iRow >= 0) Begin
+                Move RowData[iRow].sValue[iCol] to sValue
+            End
+
+            Function_Return sValue
+        End_Function
+        
+        Function RowDataFolder Integer iRow Returns String
+            tDataSourceRow[] RowData
+            String sValue
+            Handle hoDataSource 
+            Integer iCol
+
+            Move "" to sValue
+            Get piColumnId of oDataFolder_col to iCol
+            Get phoDataSource to hoDataSource
+            Get DataSource    of hoDataSource to RowData
+            Move RowData[iRow].sValue[iCol] to sValue
+
+            Function_Return sValue
+        End_Function
+
+        Function Current_Row Returns Integer
+            Integer iRow
+            Handle hoDataSource
+
+            Get phoDataSource to hoDataSource
+            Get SelectedRow   of hoDataSource to iRow
+            Function_Return iRow
+        End_Function
+
+    End_Object
+
+    Object oOK_Btn is a Button
+        Set Label to C_$OK
+        Set Location to 170 235
+        Set peAnchors To anBottomRight
+        Set Default_State to True
+        Set psToolTip to CS_DFSClickOKToSelect
+
+        Procedure OnClick
+            String sDataPath sSelectedDataFolder sSelectedDescription sFileList sConnIdPath sConnectionIni sPassword sDefaultAppPw // sHomePath
+            Handle hoWS
+            Boolean bRelativePath bConnIdFileExists bAutoRestoreOpenFiles bOK bFolderExists
+            Integer iCurrentRow iRetval
+
+            Get SelectedDataFolder of oDFSDataFolderSelector_grd to sSelectedDataFolder
+            If (Trim(sSelectedDataFolder) = "") Begin
+                Send Info_Box (CS_DFSNoFolderSelected * CS_DFSProgramWillExit)
+                Send Exit_Application
+            End
+            
+            // Panel properties:
+            Delegate Set psSelectedDataFolder to sSelectedDataFolder
+            Get SelectedDescription of oDFSDataFolderSelector_grd to sSelectedDescription
+            Delegate Set psSelectedDescription to sSelectedDescription
+            
+            Move (phoWorkspace(ghoApplication)) to hoWS
+            Get QualifiedDataPath of ghoDFSFolderSelector sSelectedDataFolder to sDataPath
+            Get IsDataFolderValid of ghoDFSFolderSelector sSelectedDataFolder to bOK
+            If (bOK = False) Begin
+                Send Info_Box (CS_DFSFolderDoesNotExist + "\n" + String(sDataPath) + "\n" + CS_DFSSelectValidFolder)
+                Set pbCloseOK to False
+                Procedure_Return
+            End
+            // Save last selected Data folder.
+            Send WriteString of ghoDFSFolderSelector CS_DFSSettings CS_DFSLastUsedDataFolder sSelectedDataFolder
+
+            // Do we need to popup the password dialog?
+            If (pbUsePasswordDialog(Self) = True) Begin
+                Get psAppDefaultPw of ghoDFSFolderSelector to sDefaultAppPw
+                Get Current_Row of oDFSDataFolderSelector_grd to iCurrentRow
+                Get ReadString of ghoDFSFolderSelector (CS_DFSIniFileDataGroup + String(iCurrentRow)) CS_DFSIniFilePassword "" to sPassword
+                Get DecryptPassword of ghoDFSFolderSelector sPassword to sPassword
+                If (sPassword <> "") Begin
+                    If (sPassword <> (sDefaultAppPw + String(iCurrentRow))) Begin
+                        Get PopupDFSPasswordDialog iCurrentRow to iRetval
+                        If (iRetval <> CI_DFSPasswordOK) Begin
+                            If (iRetval = CI_DFSPasswordErr) Begin
+                                Send Info_Box CS_DFSIncorrectPassword
+                            End
+                            Procedure_Return
+                        End
+                    End
+                End
+            End
+
+            // Save all open tables and their Master/Alias settings:
+            Get pbAutoRestoreOpenFiles of ghoDFSFolderSelector to bAutoRestoreOpenFiles
+            If (bAutoRestoreOpenFiles = True) Begin
+                Send StoreOpenTables of ghoDFSFolderSelector
+            End
+
+            // If an SQL database we need to dis-connect to the back-end.
+            // This will only work for DataFlex 19.0 and up, and a
+            // cConnection object must previously have been defined
+            // in the program using this dialog, and logged into.
+            // The cConnection object is usually placed in the cApplication object.
+            If (ghoConnection <> 0) Begin
+                Send AutoDisconnect of ghoConnection
+                Get AddFolderDelimiter of ghoDFSFolderSelector sDataPath to sConnIdPath
+                Move (sConnIdPath + C_ConnectionIniFileName) to sConnectionIni
+                File_Exist sConnectionIni bConnIdFileExists
+                // If a new DFConnId.ini file exists in the new Data folder, we
+                // will use that info.
+                If (bConnIdFileExists = True) Begin
+                    Set psConnectionIni of ghoConnection to sConnectionIni
+                End
+            End
+
+            // Close all opened tables:
+            // ToDo: Is DF_PERMANENT necesary when closing tables?
+            Close DF_ALL DF_PERMANENT
+
+            // Change workspace info for the new Data & Filelist settings:
+            Set psDataPath of hoWS to sDataPath
+            Get AddFolderDelimiter of ghoDFSFolderSelector sDataPath to sDataPath
+            // Note: We will assume that the filelist.cfg file name for the "standard" Data folder
+            // (aka the .ws file) will be the same for all Data folders.
+            Get psFileList of hoWS to sFileList
+            Get ExtractFileName sFileList to sFileList
+            Move (sDataPath + sFileList) to sFileList
+            Set psFileList of hoWS to sFileList
+
+            // Ensure that all cWorkspace properties are exactly how they would have
+            // been if the .ws file had pointed to the new Data folder when the program started.
+            // The DoAssignPaths procedure concatenates a series of properties, to set the psDfPath property:
+            Send DoAssignPaths of hoWS
+            // Sets the DF_FILELIST_NAME and DF_OPEN_PATH for the program.
+            Send DoSetPaths    of hoWS
+
+            // If an SQL database and the cConnection is used we need to reconnect to back-end:
+            // See also above about disconnecting from the current SQL database.
+            If (ghoConnection <> 0 and bConnIdFileExists = True) Begin
+                Get AddAllConnections of ghoConnection to bOK
+                If (bOK = True) Begin
+                    Get LoginAllConnections of ghoConnection to bOk
+                End
+            End
+
+            // Restore previously open tables and their Master/Alias settings:
+            If (bAutoRestoreOpenFiles = True) Begin
+                Send RestoreOpenTables of ghoDFSFolderSelector
+            End
+            // Else we simply open _all_ tables in the new filelist.cfg (with no master/alias settings),
+            // as we have no knowing of which tables might have been open prior this procedure.
+            // Kind of "Better safe than sorry", but you better have no Master/Alias settings
+            // in your program or it will hang !
+            Else Begin
+                Send OpenAllFilelistTables of ghoDFSFolderSelector
+            End
+
+            // Save the settings of this dialog to the registry, in case user made changes to size/location.
+            Send DoSaveEnvironment of ghoApplication (Parent(Self)) False
+            Set pbCloseOK to True
+
+            // There was a change in the DF client engine in version 19.0 that made it possible to
+            // to use the normal close_panel message - even if the Start_UI command hasn't been reached yet.
+            // Before that version a stop_ui message was needed, or the program would end (exit).
+#IF (!@ > 190)
+            Send Close_Panel
+#ELSE
+            Send Stop_UI
+#ENDIF
+        End_Procedure
+
+    End_Object
+
+    Object oCancel_Btn is a Button
+        Set Label to C_$Cancel
+        Set Location to 170 290
+        Set peAnchors to anBottomRight
+        Set psToolTip to C_$DescExit
+
+        Procedure OnClick
+            Set pbCloseOK to False
+            Send Close_Panel
+        End_Procedure
+
+    End_Object
+
+    Object oEdit_btn is a Button
+        Set Label to C_$CategoryEdit
+        Set Location to 170 14
+        Set peAnchors to anBottomLeft
+
+        Procedure OnClick
+            Integer iLocation
+            String sCmdLineArgument sIniFileName sProgramName sSkinInfo
+            Boolean bEditAutolocate
+            tWinFileTime IniFileWriteTimeBefore IniFileWriteTimeAfter
+            Handle ho
+
+            If (pbEditAllowed(Self) = False) Begin
+                Procedure_Return
+            End
+            
+            Get psFileName of ghoDFSFolderSelector to sIniFileName
+            Move CS_DFSCmdLineIniFile to sCmdLineArgument
+            Move (sCmdLineArgument * '"' + sIniFileName + '"') to sCmdLineArgument
+            Get pbEditAutolocate to bEditAutolocate
+            If (bEditAutolocate = True) Begin
+                Get GuiLocation of (oDFSDataFolderSelector_vw(Self)) to iLocation
+                Move (sCmdLineArgument * CS_DFSCmdLineLocation * String(iLocation)) to sCmdLineArgument
+            End
+#IFDEF psSkinFile            
+            If (ghoSkinFramework <> 0) Begin
+                Get CurrentSkinInfo to sSkinInfo
+                Append sCmdLineArgument " " sSkinInfo
+            End
+#ENDIF            
+            Get_File_Path CS_DFSSetupFolderProgram to sProgramName
+            If (sProgramName = "") Begin
+                Send Info_Box (CS_DFSProgramMissing1 * '"' + CS_DFSSetupFolderProgram + '"' * CS_DFSProgramMissing2) 
+                Procedure_Return
+            End
+            // We do a little bit of optimization to only refresh the grid
+            // if the ini-file was actually changed.
+            Get DFSFileLastWriteTime of ghoDFSFolderSelector sIniFileName to IniFileWriteTimeBefore
+
+            Runprogram Wait sProgramName sCmdLineArgument
+
+            // Reload data from the ini-file after editing is finished, if ini-file was changed.
+            Get DFSFileLastWriteTime of ghoDFSFolderSelector sIniFileName to IniFileWriteTimeAfter
+            If (IniFileWriteTimeBefore.dwLowDateTime <> IniFileWriteTimeAfter.dwLowDateTime) Begin
+                Send LoadData of oDFSDataFolderSelector_grd
+            End
+            Send Activate of oDFSDataFolderSelector_grd
+        End_Procedure
+        
+#IFDEF psSkinFile            
+        Function CurrentSkinInfo Returns String
+            String sSkinInfo sSkinFile sSkinIni
+            
+            If (ghoSkinFramework = 0) Begin
+                Function_Return ""
+            End                   
+
+            Get psSkinFile of ghoSkinFramework to sSkinFile
+            If (sSkinFile = "") Begin
+                Function_Return ""
+            End
+            Get psSkinIni  of ghoSkinFramework to sSkinIni
+            If (sSkinIni <> "") Begin
+                Move (CS_DFSCmdLineSkinFile * String(sSkinFile) * CS_DFSCmdLineSkinIni * String(sSkinIni)) to sSkinInfo
+            End
+            Else Begin
+                Move (CS_DFSCmdLineSkinFile * String(sSkinFile)) to sSkinInfo
+            End
+            Function_Return sSkinInfo
+        End_Function
+#ENDIF
+
+        On_Key kCancel Send KeyAction of oCancel_Btn
+    End_Object
+
+    Object oIniFileName_fm is a Form
+        Set Size to 12 351
+        Set Location to 190 0
+        Set Enabled_State to False
+        Set Entry_State to False
+        Set peAnchors to anBottomLeftRight
+        Set Color to clBtnFace
+        If (pbShowIniFileName(Self) = True) Begin
+            Set Value to (psFileName(ghoDFSFolderSelector))
+        End
+    End_Object
+
+    // This is also being called when clicking the "x" in the top right corner
+    // of the dialog.
+    Procedure Close_Panel
+        If (pbCloseOK(Self) = True) Begin
+            Forward Send Close_Panel
+        End
+        Else Begin
+            Send Exit_Application
+        End
+    End_Procedure  
+    
+    // This needs to be the last piece of code of this dialog:
+    Procedure OnStartup
+        tDFSDataFolders[] aDataFolders
+        Boolean bEditAllowed bExists bShouldPopUp bAutoRestoreOPenFiles bOK 
+        String sSelectedDescription sLastUsedDataFolder sDataGroup0Folder sFileList sDataPath
+        Integer iSize
+        Handle hoWS
+        
+        // THIS ACTIVATES THIS DIALOG WHEN YOUR PROGRAM STARTS!
+        If (pbAutoPopup(ghoDFSFolderSelector) = True) Begin
+            Send Cursor_Ready of Cursor_Control
+            // This property controls if the Edit button should be available or not:
+            Get pbEditAllowed to bEditAllowed
+            Set Visible_State of oEdit_btn to (bEditAllowed = True)
+            
+            Get LastUsedDataFolder of ghoDFSFolderSelector to sLastUsedDataFolder
+            Get IsDataFolderValid  of ghoDFSFolderSelector sLastUsedDataFolder to bExists
+            // This is when "Select Data New Folder" in main program has been pressed
+            If ((ReadString(ghoDFSFolderSelector,"Settings","ForcedSelect","N"))="Y") Move True to bShouldPopUp 
+            Send WriteString of ghoDFSFolderSelector "Settings" "ForcedSelect" "N"  // sets it back to No
+            If (bExists = False) Begin
+                Move True to bShouldPopUp
+                Send Info_Box (CS_DFSLastFolderMissing + "\n" + '"' + sLastUsedDataFolder + '"' + CS_DFSSelectOtherFolder)
+            End
+
+            Get ReadDataFoldersFromIniFile of ghoDFSFolderSelector  to aDataFolders
+            Move (SizeOfArray(aDataFolders)) to iSize
+            If (iSize > 1) Begin
+                Move True to bShouldPopUp
+            End
+            Else If ((iSize = 1) and (aDataFolders[0].sDataFolder <> sLastUsedDataFolder)) Begin
+                Move True to bShouldPopUp
+            End
+            
+            If (bShouldPopUp = True) Begin
+                Send Popup_Modal 
+            End
+            Else Begin
+               // Handling the equivalent checking as is done within the OK_Btn/Onclick, furhter up in this file
+               Set psSelectedDataFolder to sLastUsedDataFolder             
+               // For the moment description is not used
+
+            Move (phoWorkspace(ghoApplication)) to hoWS
+            Get QualifiedDataPath of ghoDFSFolderSelector sLastUsedDataFolder to sDataPath
+            
+             
+             // Save all open tables and their Master/Alias settings:
+            Get pbAutoRestoreOpenFiles of ghoDFSFolderSelector to bAutoRestoreOpenFiles
+            If (bAutoRestoreOpenFiles = True) Begin
+                Send StoreOpenTables of ghoDFSFolderSelector
+            End
+
+            // If an SQL database we need to dis-connect to the back-end.
+            // This will only work for DataFlex 19.0 and up, and a
+            // cConnection object must previously have been defined
+            // in the program using this dialog, and logged into.
+            // The cConnection object is usually placed in the cApplication object.
+            //CT: For the moment removed
+//            If (ghoConnection <> 0) Begin
+//                Send AutoDisconnect of ghoConnection
+//                Get AddFolderDelimiter of ghoDFSFolderSelector sDataPath to sConnIdPath
+//                Move (sConnIdPath + C_ConnectionIniFileName) to sConnectionIni
+//                File_Exist sConnectionIni bConnIdFileExists
+//                // If a new DFConnId.ini file exists in the new Data folder, we
+//                // will use that info.
+//                If (bConnIdFileExists = True) Begin
+//                    Set psConnectionIni of ghoConnection to sConnectionIni
+//                End
+//            End
+
+            // Close all opened tables:
+            // ToDo: Is DF_PERMANENT necesary when closing tables?
+            Close DF_ALL DF_PERMANENT
+
+            // Change workspace info for the new Data & Filelist settings:
+            Set psDataPath of hoWS to sDataPath
+            Get AddFolderDelimiter of ghoDFSFolderSelector sDataPath to sDataPath
+            // Note: We will assume that the filelist.cfg file name for the "standard" Data folder
+            // (aka the .ws file) will be the same for all Data folders.
+            Get psFileList of hoWS to sFileList
+            Get ExtractFileName sFileList to sFileList
+            Move (sDataPath + sFileList) to sFileList
+            Set psFileList of hoWS to sFileList
+
+            // Ensure that all cWorkspace properties are exactly how they would have
+            // been if the .ws file had pointed to the new Data folder when the program started.
+            // The DoAssignPaths procedure concatenates a series of properties, to set the psDfPath property:
+            Send DoAssignPaths of hoWS
+            // Sets the DF_FILELIST_NAME and DF_OPEN_PATH for the program.
+            Send DoSetPaths    of hoWS
+
+            // If an SQL database and the cConnection is used we need to reconnect to back-end:
+            // See also above about disconnecting from the current SQL database.
+            //For the moment removed
+//            If (ghoConnection <> 0 and bConnIdFileExists = True) Begin
+//                Get AddAllConnections of ghoConnection to bOK
+//                If (bOK = True) Begin
+//                    Get LoginAllConnections of ghoConnection to bOk
+//                End
+//            End
+
+            // Restore previously open tables and their Master/Alias settings:
+            If (bAutoRestoreOpenFiles = True) Begin
+                Send RestoreOpenTables of ghoDFSFolderSelector
+            End
+            // Else we simply open _all_ tables in the new filelist.cfg (with no master/alias settings),
+            // as we have no knowing of which tables might have been open prior this procedure.
+            // Kind of "Better safe than sorry", but you better have no Master/Alias settings
+            // in your program or it will hang !
+            Else Begin
+                Send OpenAllFilelistTables of ghoDFSFolderSelector
+            End
+ 
+            End
+            
+            // If the Description column value for the selected data folder is needed;
+            // here it is. You could e.g. create your own property somewhere and set it to the 
+            // sSelectedDescription value and then make use of it later.
+            // The psSelectedDescription property is a property of this panel and gets set
+            // automatically when a data folder is selected by the user.  
+            Get psSelectedDescription to sSelectedDescription
+            // Do what ever you want with the sSelectedDescription value here...
+        End
+    End_Procedure
+
+    Procedure OnFileDropped String sFilename Boolean bLast
+        Handle hoDataFilesGrid hoDataSource 
+        Boolean bIsFolder
+        Integer iData_col iRowno
+        tDataSourceRow[] TheData
+
+        Forward Send OnFileDropped sFilename bLast 
+        
+        // We only react on the last dropped file/folder (if multiple files/folders was dropped)
+        If (bLast = False) Begin
+            Procedure_Return
+        End
+
+        Get IsFolder of oDataFolderSelector sFilename to bIsFolder
+        If (bIsFolder = True) Begin
+            //Set Value of oCurrentDataFolder_fm to sFilename
+           Get piColumnId of oDataFolder_col to iData_col
+           Move oDFSDataFolderSelector_grd to hoDataFilesGrid
+           Get phoDataSource of hoDataFilesGrid to hoDataSource
+           Get DataSource of hoDataSource to TheData
+           Get RowCount of hoDataSource to iRowno
+           // Showln iRowno
+           // Add a row here  
+           Move sFilename to TheData[iRowno].sValue[iData_col]
+           Send InitializeData of hoDataFilesGrid TheData
+           Send MovetoRow of hoDataFilesGrid iRowno
+         End
+    End_Procedure
+
+    Object oInfo_tb is a TextBox
+        Set Auto_Size_State to False
+        Set Size to 10 273
+        Set Location to 8 8
+        Set Label to CS_DFSDragAndDropInfo
+        Set Justification_Mode to JMode_Left
+        Set peAnchors to anTopLeftRight
+        Set FontItalics to True
+    End_Object
+
+    Object oBrowseBtn is a Button
+        Set Size to 14 65
+        Set Location to 6 280
+        Set Label to 'Or Browse'
+    
+        Procedure OnClick
+            Handle hoDataFilesGrid hoDataSource 
+            Boolean bIsFolder
+            Integer iData_col iRowno iRetval
+            tDataSourceRow[] TheData
+            String sFolder sDefaultAppPw sPassword
+            
+            // Check if we should ask for a password:   
+            If (pbUsePasswordDialog(Self) = True) Begin
+                Get psAppDefaultPw of ghoDFSFolderSelector to sDefaultAppPw
+                Get ReadString of ghoDFSFolderSelector CS_DFSSettings CS_DFSIniFilePassword "" to sPassword
+                Get DecryptPassword of ghoDFSFolderSelector sPassword to sPassword
+                If (sPassword <> sDefaultAppPw) Begin
+                    Get PopupDFSConfigDialog True to iRetval
+                    If (iRetval <> CI_DFSPasswordOK) Begin
+                        If (iRetval = CI_DFSPasswordErr) Begin
+                            Send Info_Box CS_DFSIncorrectPassword
+                        End
+                        Procedure_Return
+                    End
+                End
+            End
+
+            Get SelectFolder of ghoDFSFolderSelectorDialog CS_DFSSelectDataFolder True to sFolder
+            If (sFolder <> "") Begin 
+                
+                Get IsDataFolderValid of oDataFolderSelector sFolder to bIsFolder
+                If (bIsFolder = False) Begin
+                    Send Info_Box (CS_DFSFolderDoesNotExist + "\n" + String(sFolder) + "\n" + CS_DFSSelectValidFolder)
+                    Set pbCloseOK to False
+                    Procedure_Return
+                End
+                Else Begin
+                    //Set Value of oCurrentDataFolder_fm to sFilename
+                    Get piColumnId of oDataFolder_col to iData_col
+                    Move oDFSDataFolderSelector_grd to hoDataFilesGrid
+                    Get phoDataSource of hoDataFilesGrid to hoDataSource
+                    Get DataSource of hoDataSource to TheData
+                    Get RowCount of hoDataSource to iRowno
+                    // Add a row here  
+                    Move sFolder to TheData[iRowno].sValue[iData_col]
+                    Send InitializeData of hoDataFilesGrid TheData
+                    Send MovetoRow of hoDataFilesGrid iRowno
+                End
+            End
+        End_Procedure
+    
+    End_Object
+
+    Send OnStartup
+
+    On_Key Key_Alt+Key_O Send KeyAction of oOK_Btn
+    On_Key Key_Alt+Key_C Send KeyAction of oCancel_Btn
+    On_Key kCancel       Send KeyAction of oCancel_Btn
+    On_Key Key_Alt+Key_E Send KeyAction of oEdit_btn
+    On_Key Key_F1        Send None
+End_Object 
+
+// If pbAutoPopup of ghoDFSFolderSelector had been set to false (True = default) the oDFSDataFolderSelector_vw
+// dialog will _not_ popup automatically at the row where the "Use DataFolderSelecctor.dg"
+// has been placed.
+// You can then send this message at the time you want the dialog to appear. 
+Procedure Activate_oDFSDataFolderSelector_vw
+    Handle ho                               
+    Move (oDFSDataFolderSelector_vw(Self)) to ho
+    Set pbAutoPopup of ghoDFSFolderSelector to True
+    Send OnStartup of ho
+End_Procedure
+

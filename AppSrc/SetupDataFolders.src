@@ -1,0 +1,606 @@
+﻿//****************************************************************************
+// $Module type: Program
+// $Module name: SetupDataFolders.src
+// $Author     : Nils Svedmyr, RDC Tools International, <mailto:support@rdctools.com>
+// Web-site    : http://www.rdctools.com
+// Created     : 2019-10-27 @ 09:33 (Military date format: YY-MM-DD)
+//
+// Purpose     : A utility for adding Data folders to an ini-file
+//               (DataFolderSelector.ini)
+// See Also    : Check out the SetupDataFolders.chm help file in the Help folder,
+//               or press F1 when programming is running.
+//
+// Note!       : This program should be compiled as a 32-bit application. That way
+//               it can be started from other applications that are either 
+//               32- or 64-bit's.
+//
+Use DFAllEnt.pkg
+Use cCJStandardCommandBarSystem.pkg
+Use cCJCommandBarSystem.pkg
+Use seq_chnl.pkg
+Use cDataFolderSelector.pkg
+
+Define CS_Filelist_cfg for "Filelist.cfg"
+Define CS_EmptyFilelist_cfg for "EmptyFilelist.cfg"
+
+Object oHtmlHelp is a cHtmlHelp
+    Set pbAlwaysOnTop to False
+End_Object
+
+Object oApplication is a cApplication
+    Set peHelpType to htHtmlHelp
+    Set psHelpFile to "SetupDataFolders.chm"
+    Set psCompany to "RDC Tools International"
+    Set psProduct to "Setup Data Folders"
+
+    Property Handle phoMainView 0
+    Property Integer piCallingLocation 0
+    Property Boolean pbAdminMode False
+    Property String psSkinFile
+    Property String psSkinIni
+
+#IF (!@ > 190)
+    Object oConnection is a cConnection
+        Use LoginEncryption.pkg
+        Use DatabaseLoginDialog.dg
+    End_Object
+#ENDIF
+    
+    // Command line flags; /adm and /int and /x
+    // sample: /adm /x "C:\Projects\DF19\WinServ\WinServ.sws"
+    Procedure OnCreate
+        Handle hoCmdLine
+        Integer iCount iNumArgs iLocation eOpened
+        String sArgument sIniFileName sDataFolder sFileList sWsFile sProgramPath sExtension sSkinInfo
+        Boolean bOK
+        
+        Move "Config.ws" to sWsFile
+        Get phoCommandLine to hoCmdLine
+        Get CountOfArgs of hoCmdLine to iNumArgs
+        For iCount from 1 to iNumArgs
+            Get Argument of hoCmdLine iCount to sArgument
+            Case Begin
+                // .ini file name: "/ini DataFolderSelector.ini"
+                Case (Lowercase(sArgument) = Lowercase(CS_DFSCmdLineIniFile))
+                    Get Argument of hoCmdLine (iCount + 1) to sIniFileName  
+                    Set psFileName of ghoDFSFolderSelector to sIniFileName
+                    Case Break
+                
+                // .sws file: "/x Order.sws"
+                Case (Lowercase(sArgument) = Lowercase(CS_DFSCmdLineWsFile))
+                    // Full path to the .ws path must be passed on the command line.
+                    // If the path contains spaces you need to enclose the full parameter in double quotes.
+                    Get Argument of hoCmdLine (iCount + 1) to sWsFile 
+                    // In case a .sws path is passed, read the .ws name from that ini-file.
+                    Get DFSGetFileExtension of ghoDFSFolderSelector sWsFile to sExtension  
+                    If (Lowercase(sExtension) = Lowercase(".sws")) Begin
+                        Get DFSFullWsFileNameFromSWSFile of ghoDFSFolderSelector sWsFile to sWsFile
+                    End
+                    Set psAutoOpenWorkspace to sWsFile
+                    Get ExtractFilePath of (phoWorkspace(Self)) sWsFile to sProgramPath 
+                    // We have to assume that the name of the ini-file is the default name,
+                    // as there is no way of "detecting" the file name:
+                    Move CS_DFSIniFileName to sIniFileName
+                    Set psFileName of ghoDFSFolderSelector to (sProgramPath + String(sIniFileName))
+                    Case Break
+                
+                // Admin mode: "/adm"    
+                Case (Lowercase(sArgument) = Lowercase(CS_DFSCmdLineAdmMode))
+                    Set pbAdminMode to True    
+                    Case Break
+                
+                // Application location: "/loc 250"
+                Case (Lowercase(sArgument) = Lowercase(CS_DFSCmdLineLocation))
+                    Get Argument of hoCmdLine (iCount + 1) to iLocation
+                    Set piCallingLocation to iLocation
+                    Case Break
+
+                Case (sArgument = CS_DFSCmdLineSkinFile)
+                    Get Argument of hoCmdLine (iCount + 1) to sSkinInfo
+                    Set psSkinFile to sSkinInfo
+                    Case Break
+                    
+                Case (sArgument = CS_DFSCmdLineSkinIni)
+                    Get Argument of hoCmdLine (iCount + 1) to sSkinInfo
+                    Set psSkinIni to sSkinInfo
+                    Case Break
+            Case End
+        Loop
+        
+        // Check if we can open the Data folder as outlined by the "Config.ws" file,
+        // else we will use the first valid Data folder from the ghoDFSDataFolderSelector
+        // ini-file.
+        Get OpenWorkspaceFile of (phoWorkspace(Self)) sWsFile to eOpened  
+        If (eOpened <> wsWorkspaceOpened) Begin
+            Get FirstValidFolder of ghoDFSFolderSelector to sDataFolder
+            If (sDataFolder = "") Begin
+                Get GetApplicationPath to sDataFolder
+                Get CreateEmptyFilelist sDataFolder to bOK
+                If (bOK = False) Begin
+                    Send Stop_Box "Could not create temporary Filelist.cfg. Cannot continue."
+                    Abort
+                End
+                Move CS_EmptyFilelist_cfg to sFileList
+            End
+            Else Begin
+                Move CS_Filelist_cfg to sFileList
+            End                     
+            
+            Set pbWorkspaceOpened of (phoWorkspace(Self)) to False
+            Get OpenWorkspaceFile of (phoWorkspace(Self)) sWsFile to eOpened
+            Set psDataPath of (phoWorkspace(Self)) to (FullPathNames(phoWorkspace(Self), sDataFolder))
+            Get AddFolderDelimiter of ghoDFSFolderSelector sDataFolder to sDataFolder
+            Set psFileList of (phoWorkspace(Self)) to (FullPathNames(phoWorkspace(Self), (sDataFolder + sFileList))) 
+            // We must do this; else the cApplication class tries to open the config.ws file
+            // again, which results in an error.
+            Set psAutoOpenWorkspace to ""
+        End
+    End_Procedure                                
+   
+    // This will create an empty Filelist.cfg filed in the "sDataFolder" passed,
+    // if it does not already exist.
+    // Returns True if it already exists or it was successfully created.
+    Function CreateEmptyFilelist String sDataFolder Returns Boolean
+        String sFilelistName
+        Integer iCh                  
+        Boolean bExists
+        
+        Get Seq_New_Channel to iCh
+        If (iCh = DF_SEQ_CHANNEL_NOT_AVAILABLE) Begin
+            Function_Return False
+        End
+        
+        Move False to Err
+        Get AddFolderDelimiter of ghoDFSFolderSelector sDataFolder to sDataFolder  
+        Move CS_EmptyFilelist_cfg to sFilelistName
+        File_Exist (sDataFolder + sFilelistName) bExists
+        If (bExists = True) Begin
+            Function_Return True
+        End
+        
+        Direct_Output channel iCh (sDataFolder + sFilelistName)
+            Write ""
+        Close_Output channel iCh
+        Send Seq_Release_Channel iCh
+        
+        Function_Return (Err = False)
+    End_Function
+
+End_Object
+
+Use cCJSkinFramework.pkg
+Object oCJSkinFramework is a cCJSkinFramework
+    Set psSkinFile to ""
+    Set psSkinIni to ""   
+    
+    Procedure OnCreate
+        String sSkinInfo
+        Boolean bChange
+        
+        Move False to bChange
+        Get psSkinFile of ghoApplication to sSkinInfo
+        If (sSkinInfo <> "") Begin
+            Set psSkinFile to sSkinInfo
+            Move True to bChange
+        End
+        Get psSkinIni of ghoApplication to sSkinInfo
+        If (sSkinInfo <> "") Begin
+            Set psSkinIni to sSkinInfo
+            Move True to bChange
+        End
+        If (bChange = True) Begin
+            Send ApplySkin
+        End
+    End_Procedure
+
+End_Object
+
+Object oToolTipController is a cToolTipController
+    Move Self to ghoToolTipController
+End_Object
+
+Use oEditContextMenu.pkg
+Use oDEOEditContextMenu17.pkg
+Use DFSFolderBrowse.dg
+
+Object oMain is a Panel
+    Set Location to 4 3
+    Set Size to 151 468
+    Set piMinSize to 150 300
+    Set Label to "Setup Data Folders"
+    Set Label to ("Administration:" * psProduct(ghoApplication))
+    Set Icon to "DFSSetupDataFolders.ico"
+
+    Object oCommandBarSystem is a cCJCommandBarSystem
+        Set pbTimerUpdate to True
+        Set pbShowTextBelowIcons to True
+        #IF (!@ > 182)
+            Set pbAutoResizeIcons to True
+            Set pbLargeIcons to True
+        #ENDIF
+
+        Procedure OnCreateCommandBars
+            Handle hoOptions
+            Integer iSize
+
+            Send DoChangeToolTipFormat
+
+            Get OptionsObject to hoOptions
+            Move 24 to iSize
+            Send ComSetIconSize of hoOptions False iSize iSize  // Set icon size for Toolbar buttons.
+            Forward Send OnCreateCommandBars
+        End_Procedure
+
+        Procedure DoChangeToolTipFormat
+            Variant vToolTip
+            Handle  hoObject
+            Integer eTheme iToolTipStyle
+            Boolean bIsBalloonStyleSupported
+
+            Get ComToolTipContext to vTooltip
+            Get Create (RefClass(cCJToolTipContext)) to hoObject
+            Set pvComObject of hoObject to vTooltip
+            Move xtpToolTipStandard to iToolTipStyle
+            If (iToolTipStyle = -1) Begin
+                Get peVisualTheme to eTheme
+                Set ComStyle of hoObject to eTheme
+            End
+            Else Begin
+                // Baloon tooltip style requires IE 5.0 or later, so check if installed.
+                // The ComShowTitleAndDescription also requires IE 5.0.
+                Get ComIsBalloonStyleSupported of hoObject to bIsBalloonStyleSupported
+                If (bIsBalloonStyleSupported = False) Begin
+                    // If not supported we cannot show baloon tooltip; use standard style instead.
+                    If (iToolTipStyle = xtpToolTipBalloon) Begin
+                        Move xtpToolTipStandard to iToolTipStyle
+                    End
+                End
+                Set ComStyle of hoObject to iToolTipStyle
+                If (bIsBalloonStyleSupported = True) Begin
+                    Send ComShowTitleAndDescription of hoObject True xtpToolTipIconInfo
+                End
+            End
+            Set  ComShowOfficeBorder        of hoObject to True
+            Set  ComShowShadow              of hoObject to True
+            // Set the max width for a tooltip. 250 just seems to be a good
+            // compromise. After 250 pixels the text will wrap to the next line automatically.
+            Set  ComMaxTipWidth             of hoObject to 250 // In pixels
+            Send Destroy of hoObject
+            If (phoStatusBar(ghoCommandBars)) Begin
+                Send DoChangeToolTipFormat of (phoStatusBar(Self))
+            End
+        End_Procedure
+
+        Object oOpen_Toolbar is a cCJToolbar
+            Set psTitle to "Open Toolbar"
+
+            Object oAddFolder_MenuItem is a cCJMenuItem
+                Set psToolTip to "Add data folder"
+                Set psToolTip to CS_DFSAddFolder
+                Set psDescription to "Add a data folder from a list of folders"
+                Set psDescription to (CS_DFSAddFolderHelp * "(Ctrl+A)")
+                Set psImage to "DFSAddFolder.ico"
+                Set pbActiveUpdate to True
+    
+                Procedure OnExecute Variant vCommandBarControl
+                    Forward Send OnExecute vCommandBarControl  
+                    Send ActivateDataFolderSelector of (oSetupDataFolders_grd(phoMainView(ghoApplication)))
+                End_Procedure
+    
+            End_Object
+
+            Object oOpenWindowsExplorer_MenuItem is a cCJMenuItem
+                Set psToolTip to "Windows Explorer"
+                Set psToolTip to CS_DFSOpenFolder
+                Set psDescription to "Open folder in Windows Explorer. You can use Explorer to drag & drop folders to the grid. (Ctrl+F)"
+                Set psDescription to (CS_DFSOpenFolderHelp * "(Ctrl+F)")
+                Set psImage to "DFSExplorer.ico"
+                Set pbActiveUpdate to True
+    
+                Procedure OnExecute Variant vCommandBarControl
+                    Forward Send OnExecute vCommandBarControl
+                    Send OpenContainingFolderOfSelectedRow of (phoMainView(ghoApplication))
+                End_Procedure
+    
+            End_Object
+
+            Object oOpen_MenuItem is a cCJMenuItem
+                Set psTooltip to "&Open File"
+                Set psToolTip to CS_DFSOpenHelp
+                Set psDescription to "Open ini-file (Ctrl+O)"
+                Set psDescription to (CS_DFSOpenIniFileDesc + "(Ctrl+O)")
+                Set psImage to "DFSOpenFolder.ico"
+                Set pbActiveUpdate to True
+                Set pbControlBeginGroup to True
+                Procedure OnExecute Variant vCommandBarControl
+                    Forward Send OnExecute vCommandBarControl
+                    Send ActivateOpenDialog of (phoMainView(ghoApplication))
+                End_Procedure
+            End_Object
+
+            Object oRefreshMenuItem is a cCJMenuItem
+                Set psTooltip to "&Refresh"
+                Set psToolTip to CS_DFSRefreshHelp
+                Set psDescription to "Refresh grid - reset grid values (Alt+R)"
+                Set psDescription to CS_DFSRefreshDesc
+                Set psImage to "DFSRefresh.ico"
+                Set pbActiveUpdate to True
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Integer iRows                                                              
+                    Handle ho           
+                    
+                    Move (oSetupDataFolders_grd(phoMainView(ghoApplication))) to ho
+                    Get NumberOfRows of ho to iRows
+                    If (iRows = 0) Begin
+                        Send LoadData of ho
+                    End                   
+                    Else Begin
+                        Send RefreshData of ho
+                    End
+                End_Procedure
+
+                Function IsEnabled Returns Boolean
+                    Boolean bSave bHasRecords
+                    Integer iRows
+                    tDFSDataFolders[] aDataFolders                                        
+                    
+                    Get Should_Save of (phoMainView(ghoApplication)) to bSave
+                    Get ReadDataFoldersFromIniFile of ghoDFSFolderSelector to aDataFolders
+                    Get NumberOfRows   of (oSetupDataFolders_grd(phoMainView(ghoApplication))) to iRows
+                    Move (iRows = 0 and SizeOfArray(aDataFolders)) to bHasRecords
+                    Function_Return (bSave = True or bHasRecords)
+                End_Function
+
+            End_Object
+
+        End_Object
+
+        Object oEdit_Toolbar is a cCJToolbar
+            Set psTitle to "Edit Toolbar"
+            
+            Object oSaveMenuItem is a cCJMenuItem
+                Set psTooltip to "Save"
+                Set psToolTip to CS_DFSSaveFile
+                Set psDescription to "Save changes (Ctrl+S)"
+                Set psDescription to (CS_DFSSaveFileHelp * "(Ctrl+S)")
+                Set psImage to "DFSSave.ico"
+                Set pbActiveUpdate to True
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Forward Send OnExecute vCommandBarControl
+                    Send SaveIniFile of (phoMainView(ghoApplication))
+                End_Procedure
+
+                Function IsEnabled Returns Boolean
+                    Boolean bSave
+                    Get Should_Save of (oSetupDataFolders_grd(phoMainView(ghoApplication))) to bSave
+                    Function_Return (bSave = True)
+                End_Function
+
+            End_Object
+
+            Object oClearMenuItem is a cCJMenuItem
+                Set psTooltip to "Clear All"
+                Set psToolTip to CS_DFSClearFile
+                Set psDescription to "Clear ini-file and start a new (Ctrl+F5)"
+                Set psDescription to (CS_DFSClearFileHelp * "(Ctrl+F5)")
+                Set psImage to "DFSClear.ico"
+                Set pbActiveUpdate to True
+
+                Procedure OnExecute Variant vCommandBarControl
+                    String sFileName
+                    Get psFileName of ghoDFSFolderSelector to sFileName
+                    Send ClearIniFile of (phoMainView(ghoApplication)) 
+                    Set psFileName of ghoDFSFolderSelector to sFileName
+                End_Procedure
+
+                Function IsEnabled Returns Boolean
+                    Handle ho
+                    Boolean bRecord
+                    Move (oSetupDataFolders_grd(phoMainView(ghoApplication))) to ho
+                    Get HasRecord of ho to bRecord
+                    Function_Return (bRecord = True)
+                End_Function
+
+            End_Object
+
+            Object oDeleteMenuItem is a cCJMenuItem
+                Set psTooltip to "Delete"
+                Set psToolTip to CS_DFSDeleteRow
+                Set psDescription to "Delete selected row (Del)"
+                Set psDescription to (CS_DFSDeleteRowHelp * "(Del)")
+                Set psImage to "DFSTrash.ico"
+                Set pbActiveUpdate to True
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Forward Send OnExecute vCommandBarControl
+                    Send DeleteItem of (phoMainView(ghoApplication))
+                End_Procedure
+
+                Function IsEnabled Returns Boolean
+                    Handle ho
+                    Boolean bRecord
+                    Move (oSetupDataFolders_grd(phoMainView(ghoApplication))) to ho
+                    Get HasRecord of ho to bRecord
+                    Function_Return (bRecord = True)
+                End_Function
+
+            End_Object
+
+        End_Object
+
+        Object oMove_ToolBar is a cCJToolbar
+            Set psTitle to "Move Toolbar"
+            Set peStretched to stStretchShared
+
+            Object oMoveDown_MenuItem is a cCJMenuItem
+                Set psTooltip to "Move Down"
+                Set psToolTip to CS_DFSMoveRowDown
+                Set psDescription to "Move selected line down (Alt+Key-Down)"
+                Set psDescription to (CS_DFSMoveRowDownHelp * "(Alt+Key-Down)")
+                Set psImage to "DFSMoveDown.ico"
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Send MoveDown of (oSetupDataFolders_grd(phoMainView(ghoApplication)))
+                End_Procedure
+
+            End_Object
+
+            Object oMoveUp_MenuItem is a cCJMenuItem
+                Set psTooltip to "Move Up"
+                Set psToolTip to CS_DFSMoveRowUp
+                Set psDescription to "Move selected line up (Alt+Key-Up)"
+                Set psDescription to (CS_DFSMoveRowUpHelp * "(Alt+Key-Up)")
+                Set psImage to "DFSMoveUp.ico"
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Send MoveUp of (oSetupDataFolders_grd(phoMainView(ghoApplication)))
+                End_Procedure
+
+            End_Object
+
+            Object oConfig_MenuItem is a cCJMenuItem
+                Set psTooltip to "Config the program"
+                Set psToolTip to CS_DFSConfigure
+                Set psDescription to "Configure the program"
+                Set psDescription to CS_DFSPasswordHelp
+                Set psImage to "DFSConfigure.ico"
+                Set pbControlBeginGroup to True
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Integer iRetval
+                    Forward Send OnExecute vCommandBarControl
+
+                    Get PopupDFSConfigDialog of (Client_Id(ghoCommandBars)) False to iRetval
+                    If (iRetval = CI_DFSPasswordOK) Begin
+                        Broadcast Recursive Send DoChangeFontSize of (Client_Id(ghoCommandBars))
+                    End
+                End_Procedure
+
+            End_Object
+
+        End_Object
+
+        Object oExit_Toolbar is a cCJToolbar
+            Set psTitle to "Exit Toolbar"
+            Set peStretched to stStretchShared
+
+            Object oAbout_MenuItem is a cCJMenuItem
+                Set psTooltip to C_$About
+                Set psDescription to C_$DescAbout
+                Set psImage to "DFSAbout.ico"
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Send Activate_About of (Client_Id(phoMainPanel(ghoApplication)))
+                End_Procedure
+
+            End_Object
+
+            Object oHelpMenuItem is a cCJHelpMenuItem
+                Set peControlType to xtpControlSplitButtonPopup
+                Set psCaption to C_$CaptionHelp
+                Set psToolTip to C_$ToolTipHelp
+                Set psDescription to C_$DescHelp
+                Set psImage to "DFSHelp.ico"
+
+                Object oHelpMenuItemLocal is a cCJHelpMenuItem
+                    Set psCaption to CS_DFSLocalHelpCaption
+                    Set psImage to "DFSHelp.ico"
+                End_Object
+
+                Object oHelpMenuItemInternetBrowser is a cCJMenuItem
+                    Set psCaption to CS_DFSOnlineHelpCaption
+                    Set psImage to "DFSOnlineHelp.ico"
+                    Procedure OnExecute Variant vCommandBarControl
+                        Runprogram Shell Background "https://www.rdctools.com/HTMLHelpDFS/Data Folder Selection.html"
+                    End_Procedure
+
+                End_Object
+
+            End_Object
+
+            Object oExit_MenuItem is a cCJExitMenuItem
+                Set psToolTip to "Exit"
+                Set psToolTip to C_$ToolTipExit
+                Set psDescription to "Exit application (Alt+F4)"
+                Set psDescription to (C_$DescExit * "(Alt+F4)")
+                Set psImage to "DFSExit.ico"
+            End_Object
+
+        End_Object
+
+        Object oStatusBar is a cCJStatusBar
+
+            Object oStatusPane1 is a cCJStatusBarPane
+                Set piID to sbpIDIdlePane
+                Set pbStyleStretch to True
+            End_Object
+
+            Object oStatusPane2 is a cCJStatusBarPane
+                Set pbStyleStretch to True
+                Set piTextColor to clRed
+            End_Object
+
+        End_Object
+
+    End_Object
+
+    Object oClientArea is a ClientArea
+        Use StdAbout.pkg 
+        Use DFSYesNoCancel.dg
+        Use DFSPassword.dg
+        Use DFSConfig.dg
+        Use SetupDataFolder.vw
+        
+        Procedure OnStartup
+            Integer iRetval
+            Send Cursor_Ready of Cursor_Control
+//            If (psIniFileName(ghoApplication) <> "") Begin
+//                Set psFileName of ghoDFSFolderSelector to (psIniFileName(ghoApplication))
+//            End                                                                          
+            Get PopupDFSConfigDialog True to iRetval
+            If (iRetval <> CI_DFSPasswordOK) Begin
+                If (iRetval = CI_DFSPasswordErr) Begin
+                    Send Info_Box CS_DFSIncorrectPassword
+                End
+                Send Exit_Application
+            End
+        End_Procedure
+        Send OnStartup
+
+        Procedure Activate_About
+            String sVersion
+//            Move ("Version:" * String(piVersionMajor(phoVersionInfo(ghoApplication))) + String(".") + String(piVersionMinor(phoVersionInfo(ghoApplication)))) to sVersion
+//            Send DoAbout (psProgram(ghoApplication)) sVersion "Copyright (c) 2019-2021 RDC Tools International" "Author: Nils Svedmyr support@rdctools.com" "DFSSetupDataFolders64x64.bmp"
+
+            // Below logic in DFAbout has been replaced, so if the first four parameters are blank, an About.rtf file
+            // in the Help folder, will be read into the cRichEdit object of hte DFAbout dialog.
+            Send DoAbout "" "" "" "" "DFSSetupDataFolders64x64.bmp" "E-mail: mailto:support@rdctools.com" "Web-site: www.rdctools.com" ("This tool was created with DataFlex" * String(C_DFVersion) * "from Data Access Worldwide. Please visit http://www.dataaccess.com for a free personal copy of DataFlex.")
+        End_Procedure
+
+    End_Object
+
+End_Object
+
+// This does the auto-relocation if program was started with the
+// CS_DFSCmdLineLocation command line switch.
+// We need to have this after the Main panel object ends because it loads
+// the saved size/location in procedure Page.
+Procedure OnStartup
+    Integer iCallingLocation
+    Get piCallingLocation of ghoApplication to iCallingLocation
+    If (iCallingLocation <> 0) Begin
+        Set GuiLocation of (phoMainPanel(ghoApplication)) to (Hi(iCallingLocation)) (Low(iCallingLocation))
+    End
+End_Procedure
+Send OnStartup
+
+// If you get a compile error about a resource. "..\APPSRC\COMPILEHEADER.H", 
+// you need to compile the program "WriteDateTimeHeaderFile.src" first!
+//
+// If you get a compile error: "Can't include resource ..\HELP\ABOUT.RTF",
+// you need to create a "About.rtf" file in the Help folder.
+// Note that it can be empty, but it needs to exist for the About dialog.
+// Or you can remark line 1302 in DfAbout.pkg = "Define ShouldEmbeddAboutHelpFile for 0"
+Start_UI
