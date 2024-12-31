@@ -1,4 +1,5 @@
 The Data Folder Selector Utility
+See Also: The SetupDataFolders.chm file in the Help folder.
 
 The Data Folder Selector Utility helps users select a Data folder (Client Company) to use when a program starts.
 Two parts are needed for this to work;
