@@ -15,7 +15,8 @@
 **/AppSrc/**/*.pkd
 **/AppSrc/**/*.prn
 **/AppSrc/**/*.prp
-loginEncryptionkey.inc
+**/AppSrc/**/CompileHeader.h
+**/AppSrc/**/loginEncryptionkey.inc
 
 # Data
 **/Data/**/*.log
