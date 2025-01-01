@@ -4,7 +4,11 @@ Version=20.1
 ConfigFile=.\Programs\Config.ws
 [Conditionals]
 Is$WebApp=False
+Is$Win64=False
 [Preferences]
 DefaultFormHeight=12
 [Projects]
 Project0=SetupDataFolders.src
+Project1=WriteDateTimeHeaderFile.src
+[Libraries]
+Lib1=Libraries\DFAbout\DFAbout20.1.sws

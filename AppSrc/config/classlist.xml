@@ -4,8 +4,8 @@
 	<DFLibraryVersion>1</DFLibraryVersion>
 	<libraries>
 		<library>
-			<libraryPath>..\..\..\Libraries\DFAbout\DFAbout24.0.sws</libraryPath>
-			<libraryTimeStamp>2024-12-29T20:38:54</libraryTimeStamp>
+			<libraryPath>Libraries\DFAbout\DFAbout24.0.sws</libraryPath>
+			<libraryTimeStamp>2025-01-01T13:45:10</libraryTimeStamp>
 			<libraryID>Lib1</libraryID>
 		</library>
 	</libraries>

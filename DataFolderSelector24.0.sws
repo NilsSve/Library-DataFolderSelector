@@ -11,4 +11,4 @@ DefaultFormHeight=12
 Project0=SetupDataFolders.src
 Project1=WriteDateTimeHeaderFile.src
 [Libraries]
-Lib1=..\..\..\Libraries\DFAbout\DFAbout24.0.sws
+Lib1=Libraries\DFAbout\DFAbout24.0.sws
