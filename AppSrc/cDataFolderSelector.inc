@@ -90,7 +90,7 @@ External_Function DFS_GetFileTime "GetFileTime" Kernel32.dll ;
     Returns Integer
 #ENDIF
 
-#IF Is$Win64
+#IFDEF Is$Win64
     Define CS_DFSSetupFolderProgram for "SetupDataFolders64.exe"
 #ELSE
     Define CS_DFSSetupFolderProgram for "SetupDataFolders.exe"
