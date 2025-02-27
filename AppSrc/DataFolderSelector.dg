@@ -1,4 +1,4 @@
-//****************************************************************************
+﻿//****************************************************************************
 // $Module type: Dialog
 // $Module name: DataFolderSelector.dg
 // $Author     : Nils Svedmyr, RDC Tools International, <mailto:support@rdctools.com>
@@ -10,7 +10,7 @@
 // See Also    : Check out the SetupDataFolders.chm help file in the Help folder.
 //
 Use Windows.pkg
-Use cCJGrid.pkg
+Use cRDCCJGrid.pkg
 Use cCJGridColumnRowIndicator.pkg
 Use cCJGridColumn.pkg
 Use Cursor.pkg
@@ -34,25 +34,25 @@ Object oDFSDataFolderSelector_vw is a cDFSView
         Move Self to ghoCommandBars
     End_Object
     
-    Object oDFSDataFolderSelector_grd is a cCJGrid
+    Object oDFSDataFolderSelector_grd is a cRDCCJGrid
         Set Size to 141 324
         Set Location to 25 10
-        Set peAnchors to anAll
-        Set pbShowRowFocus to True
-        Set pbUseAlternateRowBackgroundColor to True
-        Set pbSelectionEnable to True
-        Set pbRestoreLayout to True
-        Set pbShowFooter to True
-        Set pbAllowAppendRow to False
+//        Set peAnchors to anAll
+//        Set pbShowRowFocus to True
+//        Set pbUseAlternateRowBackgroundColor to True
+//        Set pbSelectionEnable to True
+//        Set pbRestoreLayout to True
+//        Set pbShowFooter to True
+//        Set pbAllowAppendRow to False
         Set pbAllowEdit to False
-        Set pbAllowInsertRow to False
-        Set pbAutoAppend to False
+//        Set pbAllowInsertRow to False
+//        Set pbAutoAppend to False
         Set pbEditOnTyping to False
-        Set psLayoutSection to "oDFSDataFolderSelector_grd"
-        Set peTooltipStyle to xtpToolTipOffice2013
+//        Set psLayoutSection to "oDFSDataFolderSelector_grd"
+//        Set peTooltipStyle to xtpToolTipOffice2013
         Set piLayoutBuild to 4
-        Set pbHeaderReorders to True
-        Set pbHeaderTogglesDirection to True
+//        Set pbHeaderReorders to True
+//        Set pbHeaderTogglesDirection to True
 
         Object oCJGridColumnRowIndicator is a cCJGridColumnRowIndicator
             Set piWidth to 30
