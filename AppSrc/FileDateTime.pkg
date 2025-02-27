@@ -120,29 +120,29 @@ External_Function FindNextFile "FindNextFileW" Kernel32.Dll ;
 External_Function FindClose "FindClose" Kernel32.Dll ;
    Handle hFindFile Returns Integer
 
-//Function ConvertDateTimeToSystemDateTime Global UInteger dwLowDateTime UInteger dwHighDateTime Returns DateTime
-//    String sFormattedTime sFormattedDate
-//    Integer iSuccess iDataLength
-//    tWinSystemTime SystemTime
-//    tWinFileTime FileTime
-//    DateTime dtResult
-//
-//    Move dwLowDateTime  to FileTime.dwLowDateTime
-//    Move dwHighDateTime to FileTime.dwHighDateTime
-//
-//    Move (FileTimeToSystemTime (AddressOf(FileTime), AddressOf(SystemTime))) to iSuccess
-//    If (iSuccess <> 0) Begin
-//        Move (Repeat(Character (0), 255)) to sFormattedTime
-//        Move (GetTimeFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedTime), 255)) to iDataLength
-//
-//        Move (Repeat(Character(0), 255)) to sFormattedDate
-//        Move (GetDateFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedDate), 255)) to iDataLength
-//
-//        Move (Cstring(sFormattedDate) * Cstring (sFormattedTime)) to dtResult
-//    End
-//
-//    Function_Return dtResult
-//End_Function
+Function ConvertDateTimeToSystemDateTime_FDT Global UInteger dwLowDateTime UInteger dwHighDateTime Returns DateTime
+    String sFormattedTime sFormattedDate
+    Integer iSuccess iDataLength
+    tWinSystemTime SystemTime
+    tWinFileTime FileTime
+    DateTime dtResult
+
+    Move dwLowDateTime  to FileTime.dwLowDateTime
+    Move dwHighDateTime to FileTime.dwHighDateTime
+
+    Move (FileTimeToSystemTime (AddressOf(FileTime), AddressOf(SystemTime))) to iSuccess
+    If (iSuccess <> 0) Begin
+        Move (Repeat(Character (0), 255)) to sFormattedTime
+        Move (GetTimeFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedTime), 255)) to iDataLength
+
+        Move (Repeat(Character(0), 255)) to sFormattedDate
+        Move (GetDateFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedDate), 255)) to iDataLength
+
+        Move (Cstring(sFormattedDate) * Cstring (sFormattedTime)) to dtResult
+    End
+
+    Function_Return dtResult
+End_Function
 
 // 2019-12-18 NS. Converted for DF Next Gen (DF 20) to handle Unicode file names.
 Function FileDateTime Global String sFilePath Returns tFileDateTime_FDT[]
@@ -177,11 +177,11 @@ Function FileDateTime Global String sFilePath Returns tFileDateTime_FDT[]
            
             Move Win32_Find_Data.dwFileAttributes to aFileDateTime[iFile].iAttributes   
             Move Win32_Find_Data.ftCreationTime   to FileTime_Create
-            Move (ConvertDateTimeToSystemDateTime (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastWrite
+            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastWrite
             Move Win32_Find_Data.ftCreationTime   to FileTime_LastAccess
-            Move (ConvertDateTimeToSystemDateTime (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastAccessed
+            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastAccessed
             Move Win32_Find_Data.ftLastWriteTime  to FileTime_LastWrite
-            Move (ConvertDateTimeToSystemDateTime (FileTime_LastWrite.dwLowDateTime, FileTime_LastWrite.dwHighDateTime)) to aFileDateTime[iFile].dtLastWrite
+            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_LastWrite.dwLowDateTime, FileTime_LastWrite.dwHighDateTime)) to aFileDateTime[iFile].dtLastWrite
             Increment iFile
 
             #IF (!@ < 200)
