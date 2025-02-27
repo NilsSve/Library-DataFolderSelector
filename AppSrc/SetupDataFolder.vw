@@ -10,11 +10,12 @@
 // See Also    : Check out the SetupDataFolders.chm help file in the Help folder.
 //
 Use Windows.pkg
-Use Dfclient.pkg
 Use seq_chnl.pkg
 Use Winkern.pkg
-Use cCJCommandBarSystem.pkg
-Use cCJGrid.pkg
+Use cRDCView.pkg
+//Use cCJCommandBarSystem.pkg
+//Use cCJGrid.pkg   
+Use cRDCCJGrid.pkg
 Use cCJGridColumnRowIndicator.pkg
 Use cCJGridColumn.pkg
 Use File_dlg.pkg
@@ -31,7 +32,7 @@ Use DFSFolderBrowse.dg
 Register_Procedure Set phoMainView
 Register_Function SelectFolder Returns String
 
-Object oDataFolderSelector_vw is a View
+Object oDataFolderSelector_vw is a cRDCView
     Set Size to 117 321
     Set Location to 2 2
     Set Border_Style To Border_Thick
@@ -54,23 +55,25 @@ Object oDataFolderSelector_vw is a View
         Set FontItalics to True
     End_Object
 
-    Object oSetupDataFolders_grd is a cCJGrid
+    Object oSetupDataFolders_grd is a cRDCCJGrid //cCJGrid
         Set Size to 91 297
         Set Location to 18 13
-        Set peAnchors to anAll
-        Set pbShowRowFocus to True
-        Set pbUseAlternateRowBackgroundColor to True
-        Set pbSelectionEnable to True
-        Set pbRestoreLayout to True
-        Set psLayoutSection to (Object_Label(Self))
-        Set piLayoutBuild to 7
-        Set pbShowFooter to True
-        Set peTooltipStyle to xtpToolTipOffice2013
-#IFDEF (!@ < 23)
-        Set peVisualTheme to xtpReportThemeOffice2003
-#ELSE
-        Set peVisualTheme to xtpThemeOffice2003
-#ENDIF        
+//        Set peAnchors to anAll
+//        Set pbShowRowFocus to True
+//        Set pbUseAlternateRowBackgroundColor to True
+//        Set pbSelectionEnable to True
+//        Set pbRestoreLayout to True
+//        Set psLayoutSection to (Object_Label(Self))
+//        Set pbShowFooter to True
+        Set piLayoutBuild to 7 
+        Set peVisualTheme to xtpGridThemeVisualStudio2022 //xtpGridThemeExplorer
+        
+//        Set peTooltipStyle to xtpToolTipOffice2013
+//#IFDEF (!@ < 23)
+//        Set peVisualTheme to xtpReportThemeOffice2003
+//#ELSE
+//        Set peVisualTheme to xtpThemeOffice2003
+//#ENDIF        
         // These color settings are necessary for displaying the text correctly
         // when in edit mode, as we are not using the VDFEditControl. The text
         // then became with on a white background in Edit mode, which of course
@@ -78,15 +81,15 @@ Object oDataFolderSelector_vw is a View
         // The reason we're not using the VDFEditControl is that I wanted both
         // the F2 and the Esc keys to work for entering/leaving edit mode and
         // I couldn't make that happen with the VDFEditControl...
-        Set piHighlightForeColor to clBlack
+//        Set piHighlightForeColor to clBlack
         // Which color combination to use? Can't make up my mind.
-        Set piHighlightBackColor to clLtGray
-        Set piFocusCellBackColor to (RGB(240,240,240)) // Very light grey color.
+//        Set piHighlightBackColor to clLtGray
+//        Set piFocusCellBackColor to (RGB(240,240,240)) // Very light grey color.
 //        Set piHighlightBackColor to clGray
 //        Set piFocusCellBackColor to clLtGray
-        Set psNoItemsText to CS_DFSNoFoldersAdded
-        Set pbHeaderPrompts to True 
-        Set peBorderStyle to xtpBorderClientEdge
+//        Set psNoItemsText to CS_DFSNoFoldersAdded
+//        Set pbHeaderPrompts to True 
+//        Set peBorderStyle to xtpBorderClientEdge
         
         Object oCJGridColumnRowIndicator is a cCJGridColumnRowIndicator
             Set piWidth to 25
