@@ -4,3 +4,7 @@
 [submodule "Libraries/DataFolderSelector"]
 	path = Libraries/DataFolderSelector
 	url = https://github.com/NilsSve/Library-DataFolderSelector
+[submodule "Libraries/RDCToolsLib"]
+	path = Libraries/RDCToolsLib
+	url = https://github.com/NilsSve/Library-RDCToolsLib.git
+	branch = main
