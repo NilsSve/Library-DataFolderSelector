@@ -13,8 +13,6 @@ Use Windows.pkg
 Use seq_chnl.pkg
 Use Winkern.pkg
 Use cRDCView.pkg
-//Use cCJCommandBarSystem.pkg
-//Use cCJGrid.pkg   
 Use cRDCCJGrid.pkg
 Use cCJGridColumnRowIndicator.pkg
 Use cCJGridColumn.pkg
@@ -23,11 +21,6 @@ Use DFSYesNoCancel.dg
 Use cDataFolderSelector.pkg
 Use cDataFolderLanguageConstants.inc
 Use DFSFolderBrowse.dg
-//Use cDFSDialog.pkg
-
-//#IFNDEF ghoDFSFolderSelectorDialog
-//    Global_Variable Handle ghoDFSFolderSelectorDialog
-//#ENDIF                                                
 
 Register_Procedure Set phoMainView
 Register_Function SelectFolder Returns String
@@ -55,41 +48,10 @@ Object oDataFolderSelector_vw is a cRDCView
         Set FontItalics to True
     End_Object
 
-    Object oSetupDataFolders_grd is a cRDCCJGrid //cCJGrid
+    Object oSetupDataFolders_grd is a cRDCCJGrid
         Set Size to 91 297
         Set Location to 18 13
-//        Set peAnchors to anAll
-//        Set pbShowRowFocus to True
-//        Set pbUseAlternateRowBackgroundColor to True
-//        Set pbSelectionEnable to True
-//        Set pbRestoreLayout to True
-//        Set psLayoutSection to (Object_Label(Self))
-//        Set pbShowFooter to True
         Set piLayoutBuild to 7 
-        Set peVisualTheme to xtpGridThemeVisualStudio2022 //xtpGridThemeExplorer
-        
-//        Set peTooltipStyle to xtpToolTipOffice2013
-//#IFDEF (!@ < 23)
-//        Set peVisualTheme to xtpReportThemeOffice2003
-//#ELSE
-//        Set peVisualTheme to xtpThemeOffice2003
-//#ENDIF        
-        // These color settings are necessary for displaying the text correctly
-        // when in edit mode, as we are not using the VDFEditControl. The text
-        // then became with on a white background in Edit mode, which of course
-        // is no good.
-        // The reason we're not using the VDFEditControl is that I wanted both
-        // the F2 and the Esc keys to work for entering/leaving edit mode and
-        // I couldn't make that happen with the VDFEditControl...
-//        Set piHighlightForeColor to clBlack
-        // Which color combination to use? Can't make up my mind.
-//        Set piHighlightBackColor to clLtGray
-//        Set piFocusCellBackColor to (RGB(240,240,240)) // Very light grey color.
-//        Set piHighlightBackColor to clGray
-//        Set piFocusCellBackColor to clLtGray
-//        Set psNoItemsText to CS_DFSNoFoldersAdded
-//        Set pbHeaderPrompts to True 
-//        Set peBorderStyle to xtpBorderClientEdge
         
         Object oCJGridColumnRowIndicator is a cCJGridColumnRowIndicator
             Set piWidth to 25
@@ -102,7 +64,6 @@ Object oDataFolderSelector_vw is a cRDCView
             Set psToolTip to (CS_DFSAddFolder * "(Ctrl+A)")
             Set pbVDFEditControl to False
             Set Prompt_Button_Mode to PB_PromptOn
-//            Set peHeaderAlignment to xtpAlignmentCenter
             Set psImage to "DFSAddFolder.ico"   
             // This is also necessary for displaying the text correctly,
             // when in edit mode as we are not using the VDFEditControl.
