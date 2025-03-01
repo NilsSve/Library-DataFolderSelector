@@ -1004,12 +1004,6 @@ Object oDataFolderSelector_vw is a cRDCView
         Boolean bFoldersExists
         String sFilename sPath
 
-        // We should probably allow for unavailable folders to be saved, as they
-        // might be avilable when the data is used.
-//        Get AllDataFoldersExists of oSetupDataFolders_grd to bFoldersExists
-//        If (bFoldersExists = False) Begin
-//            Procedure_Return
-//        End
         Send ChangeStatusRowText ""
 
         Get psFileName of ghoDFSFolderSelector to sFilename

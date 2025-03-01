@@ -37,22 +37,9 @@ Object oDFSDataFolderSelector_vw is a cDFSView
     Object oDFSDataFolderSelector_grd is a cRDCCJGrid
         Set Size to 141 324
         Set Location to 25 10
-//        Set peAnchors to anAll
-//        Set pbShowRowFocus to True
-//        Set pbUseAlternateRowBackgroundColor to True
-//        Set pbSelectionEnable to True
-//        Set pbRestoreLayout to True
-//        Set pbShowFooter to True
-//        Set pbAllowAppendRow to False
         Set pbAllowEdit to False
-//        Set pbAllowInsertRow to False
-//        Set pbAutoAppend to False
         Set pbEditOnTyping to False
-//        Set psLayoutSection to "oDFSDataFolderSelector_grd"
-//        Set peTooltipStyle to xtpToolTipOffice2013
         Set piLayoutBuild to 4
-//        Set pbHeaderReorders to True
-//        Set pbHeaderTogglesDirection to True
 
         Object oCJGridColumnRowIndicator is a cCJGridColumnRowIndicator
             Set piWidth to 30
@@ -75,7 +62,7 @@ Object oDFSDataFolderSelector_vw is a cDFSView
             End_Procedure
 
             // Uncomment the next line to hide the Description column;
-//            Set pbVisible to False
+            // Set pbVisible to False
         End_Object
 
         Object oDataFolder_col is a cCJGridColumn
@@ -102,7 +89,7 @@ Object oDFSDataFolderSelector_vw is a cDFSView
             tDataSourceRow[] TheData
             tDataSourceRow TheRow  
             Boolean bSelected bIsValid bOK 
-            String sLastDataFolder   // Added by CT
+            String sLastDataFolder
             
             Move False to bOK
             Move 0  to iSelectedRow
@@ -121,7 +108,7 @@ Object oDFSDataFolderSelector_vw is a cDFSView
             
             Decrement iSize
             Move 0 to iItem
-            Move -1 to iSelectedRow   // CT, Added 2020-05-31
+            Move -1 to iSelectedRow
             For iCount from 0 to iSize
                 If (aDataFolders[iCount].bActive = True) Begin
                     Move aDataFolders[iCount].sDataFolder  to TheRow.sValue[iData_col]
@@ -532,8 +519,8 @@ Object oDFSDataFolderSelector_vw is a cDFSView
     // This needs to be the last piece of code of this dialog:
     Procedure OnStartup
         tDFSDataFolders[] aDataFolders
-        Boolean bEditAllowed bExists bShouldPopUp bAutoRestoreOPenFiles bOK 
-        String sSelectedDescription sLastUsedDataFolder sDataGroup0Folder sFileList sDataPath
+        Boolean bEditAllowed bExists bShouldPopUp bAutoRestoreOPenFiles bOK bConnIdFileExists
+        String sSelectedDescription sLastUsedDataFolder sDataGroup0Folder sFileList sDataPath sConnIdPath sConnectionIni
         Integer iSize
         Handle hoWS
         
@@ -547,7 +534,9 @@ Object oDFSDataFolderSelector_vw is a cDFSView
             Get LastUsedDataFolder of ghoDFSFolderSelector to sLastUsedDataFolder
             Get IsDataFolderValid  of ghoDFSFolderSelector sLastUsedDataFolder to bExists
             // This is when "Select Data New Folder" in main program has been pressed
-            If ((ReadString(ghoDFSFolderSelector,"Settings","ForcedSelect","N"))="Y") Move True to bShouldPopUp 
+            If ((ReadString(ghoDFSFolderSelector, "Settings", "ForcedSelect", "N")) = "Y") Begin
+                Move True to bShouldPopUp 
+            End
             Send WriteString of ghoDFSFolderSelector "Settings" "ForcedSelect" "N"  // sets it back to No
             If (bExists = False) Begin
                 Move True to bShouldPopUp
@@ -586,18 +575,17 @@ Object oDFSDataFolderSelector_vw is a cDFSView
             // cConnection object must previously have been defined
             // in the program using this dialog, and logged into.
             // The cConnection object is usually placed in the cApplication object.
-            //CT: For the moment removed
-//            If (ghoConnection <> 0) Begin
-//                Send AutoDisconnect of ghoConnection
-//                Get AddFolderDelimiter of ghoDFSFolderSelector sDataPath to sConnIdPath
-//                Move (sConnIdPath + C_ConnectionIniFileName) to sConnectionIni
-//                File_Exist sConnectionIni bConnIdFileExists
-//                // If a new DFConnId.ini file exists in the new Data folder, we
-//                // will use that info.
-//                If (bConnIdFileExists = True) Begin
-//                    Set psConnectionIni of ghoConnection to sConnectionIni
-//                End
-//            End
+            If (ghoConnection <> 0) Begin
+                Send AutoDisconnect of ghoConnection
+                Get AddFolderDelimiter of ghoDFSFolderSelector sDataPath to sConnIdPath
+                Move (sConnIdPath + C_ConnectionIniFileName) to sConnectionIni
+                File_Exist sConnectionIni bConnIdFileExists
+                // If a new DFConnId.ini file exists in the new Data folder, we
+                // will use that info.
+                If (bConnIdFileExists = True) Begin
+                    Set psConnectionIni of ghoConnection to sConnectionIni
+                End
+            End
 
             // Close all opened tables:
             // ToDo: Is DF_PERMANENT necesary when closing tables?
@@ -622,13 +610,12 @@ Object oDFSDataFolderSelector_vw is a cDFSView
 
             // If an SQL database and the cConnection is used we need to reconnect to back-end:
             // See also above about disconnecting from the current SQL database.
-            //For the moment removed
-//            If (ghoConnection <> 0 and bConnIdFileExists = True) Begin
-//                Get AddAllConnections of ghoConnection to bOK
-//                If (bOK = True) Begin
-//                    Get LoginAllConnections of ghoConnection to bOk
-//                End
-//            End
+            If (ghoConnection <> 0 and bConnIdFileExists = True) Begin
+                Get AddAllConnections of ghoConnection to bOK
+                If (bOK = True) Begin
+                    Get LoginAllConnections of ghoConnection to bOk
+                End
+            End
 
             // Restore previously open tables and their Master/Alias settings:
             If (bAutoRestoreOpenFiles = True) Begin
@@ -766,4 +753,3 @@ Procedure Activate_oDFSDataFolderSelector_vw
     Set pbAutoPopup of ghoDFSFolderSelector to True
     Send OnStartup of ho
 End_Procedure
-
