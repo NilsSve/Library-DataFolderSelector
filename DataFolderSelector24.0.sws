@@ -4,8 +4,12 @@ Version=24.0
 ConfigFile=.\Programs\Config.ws
 [Conditionals]
 Is$WebApp=False
-Is$Win64=False
+Is$Win64=True
 [Preferences]
 DefaultFormHeight=12
 [Projects]
-Project0=SetupDataFolders.src
+Project0=Order.src
+[Libraries]
+Lib1=Libraries\DFAbout\DFAbout24.0.sws
+Lib2=Libraries\RDCToolsLib\RDCToolsLib24.0.sws
+Lib3=Libraries\vwin32fh\StudioLibrary\vWin32fh-Library-DF24.0.sws

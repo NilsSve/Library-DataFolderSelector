@@ -159,7 +159,7 @@ Class cDbFormHint is a dbForm
 
     // Value
     // Augment it to make sure the hint value is not returned.
-    Function Value Returns Integer
+    Function Value Returns String
         String sString
 
         Forward Get Value to sString

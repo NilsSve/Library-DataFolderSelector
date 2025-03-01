@@ -15,8 +15,7 @@
 //               32- or 64-bit's.
 //
 Use DFAllEnt.pkg
-Use cCJStandardCommandBarSystem.pkg
-Use cCJCommandBarSystem.pkg
+Use cRDCCJCommandBarSystem.pkg
 Use seq_chnl.pkg
 Use cDataFolderSelector.pkg
 
@@ -27,7 +26,8 @@ Object oHtmlHelp is a cHtmlHelp
     Set pbAlwaysOnTop to False
 End_Object
 
-Object oApplication is a cApplication
+Use cRDCApplication.pkg
+Object oApplication is a cRDCApplication
     Set peHelpType to htHtmlHelp
     Set psHelpFile to "SetupDataFolders.chm"
     Set psCompany to "RDC Tools International"
@@ -39,12 +39,10 @@ Object oApplication is a cApplication
     Property String psSkinFile
     Property String psSkinIni
 
-#IF (!@ > 190)
     Object oConnection is a cConnection
         Use LoginEncryption.pkg
         Use DatabaseLoginDialog.dg
     End_Object
-#ENDIF
     
     // Command line flags; /adm and /int and /x
     // sample: /adm /x "C:\Projects\DF19\WinServ\WinServ.sws"
@@ -168,35 +166,8 @@ Object oApplication is a cApplication
 
 End_Object
 
-Use cCJSkinFramework.pkg
-Object oCJSkinFramework is a cCJSkinFramework
-    Set psSkinFile to ""
-    Set psSkinIni to ""   
-    
-    Procedure OnCreate
-        String sSkinInfo
-        Boolean bChange
-        
-        Move False to bChange
-        Get psSkinFile of ghoApplication to sSkinInfo
-        If (sSkinInfo <> "") Begin
-            Set psSkinFile to sSkinInfo
-            Move True to bChange
-        End
-        Get psSkinIni of ghoApplication to sSkinInfo
-        If (sSkinInfo <> "") Begin
-            Set psSkinIni to sSkinInfo
-            Move True to bChange
-        End
-        If (bChange = True) Begin
-            Send ApplySkin
-        End
-    End_Procedure
-
-End_Object
-
-Object oToolTipController is a cToolTipController
-    Move Self to ghoToolTipController
+Use cRDCTooltipController.pkg
+Object oToolTipController is a cRDCTooltipController
 End_Object
 
 Use oEditContextMenu.pkg
@@ -211,66 +182,7 @@ Object oMain is a Panel
     Set Label to ("Administration:" * psProduct(ghoApplication))
     Set Icon to "DFSSetupDataFolders.ico"
 
-    Object oCommandBarSystem is a cCJCommandBarSystem
-        Set pbTimerUpdate to True
-        Set pbShowTextBelowIcons to True
-        #IF (!@ > 182)
-            Set pbAutoResizeIcons to True
-            Set pbLargeIcons to True
-        #ENDIF
-
-        Procedure OnCreateCommandBars
-            Handle hoOptions
-            Integer iSize
-
-            Send DoChangeToolTipFormat
-
-            Get OptionsObject to hoOptions
-            Move 24 to iSize
-            Send ComSetIconSize of hoOptions False iSize iSize  // Set icon size for Toolbar buttons.
-            Forward Send OnCreateCommandBars
-        End_Procedure
-
-        Procedure DoChangeToolTipFormat
-            Variant vToolTip
-            Handle  hoObject
-            Integer eTheme iToolTipStyle
-            Boolean bIsBalloonStyleSupported
-
-            Get ComToolTipContext to vTooltip
-            Get Create (RefClass(cCJToolTipContext)) to hoObject
-            Set pvComObject of hoObject to vTooltip
-            Move xtpToolTipStandard to iToolTipStyle
-            If (iToolTipStyle = -1) Begin
-                Get peVisualTheme to eTheme
-                Set ComStyle of hoObject to eTheme
-            End
-            Else Begin
-                // Baloon tooltip style requires IE 5.0 or later, so check if installed.
-                // The ComShowTitleAndDescription also requires IE 5.0.
-                Get ComIsBalloonStyleSupported of hoObject to bIsBalloonStyleSupported
-                If (bIsBalloonStyleSupported = False) Begin
-                    // If not supported we cannot show baloon tooltip; use standard style instead.
-                    If (iToolTipStyle = xtpToolTipBalloon) Begin
-                        Move xtpToolTipStandard to iToolTipStyle
-                    End
-                End
-                Set ComStyle of hoObject to iToolTipStyle
-                If (bIsBalloonStyleSupported = True) Begin
-                    Send ComShowTitleAndDescription of hoObject True xtpToolTipIconInfo
-                End
-            End
-            Set  ComShowOfficeBorder        of hoObject to True
-            Set  ComShowShadow              of hoObject to True
-            // Set the max width for a tooltip. 250 just seems to be a good
-            // compromise. After 250 pixels the text will wrap to the next line automatically.
-            Set  ComMaxTipWidth             of hoObject to 250 // In pixels
-            Send Destroy of hoObject
-            If (phoStatusBar(ghoCommandBars)) Begin
-                Send DoChangeToolTipFormat of (phoStatusBar(Self))
-            End
-        End_Procedure
-
+    Object oCommandBarSystem is a cRDCCJCommandBarSystem
         Object oOpen_Toolbar is a cCJToolbar
             Set psTitle to "Open Toolbar"
 
@@ -327,29 +239,13 @@ Object oMain is a Panel
                 Set pbActiveUpdate to True
 
                 Procedure OnExecute Variant vCommandBarControl
-                    Integer iRows                                                              
-                    Handle ho           
-                    
-                    Move (oSetupDataFolders_grd(phoMainView(ghoApplication))) to ho
-                    Get NumberOfRows of ho to iRows
-                    If (iRows = 0) Begin
-                        Send LoadData of ho
-                    End                   
-                    Else Begin
-                        Send RefreshData of ho
-                    End
+                    Send RefreshData of (oSetupDataFolders_grd(phoMainView(ghoApplication)))
                 End_Procedure
 
                 Function IsEnabled Returns Boolean
-                    Boolean bSave bHasRecords
-                    Integer iRows
-                    tDFSDataFolders[] aDataFolders                                        
-                    
+                    Boolean bSave
                     Get Should_Save of (phoMainView(ghoApplication)) to bSave
-                    Get ReadDataFoldersFromIniFile of ghoDFSFolderSelector to aDataFolders
-                    Get NumberOfRows   of (oSetupDataFolders_grd(phoMainView(ghoApplication))) to iRows
-                    Move (iRows = 0 and SizeOfArray(aDataFolders)) to bHasRecords
-                    Function_Return (bSave = True or bHasRecords)
+                    Function_Return (bSave = True)
                 End_Function
 
             End_Object
@@ -389,10 +285,7 @@ Object oMain is a Panel
                 Set pbActiveUpdate to True
 
                 Procedure OnExecute Variant vCommandBarControl
-                    String sFileName
-                    Get psFileName of ghoDFSFolderSelector to sFileName
-                    Send ClearIniFile of (phoMainView(ghoApplication)) 
-                    Set psFileName of ghoDFSFolderSelector to sFileName
+                    Send ClearIniFile of (phoMainView(ghoApplication))
                 End_Procedure
 
                 Function IsEnabled Returns Boolean
@@ -497,6 +390,28 @@ Object oMain is a Panel
 
             End_Object
 
+            Object oKoFi_MenuItem is a cCJMenuItem
+                Set psToolTip to "Coffee time!"
+                Set psDescription to "Bye me a coffee, to support me"
+                Set psImage to "Ko-fi.ico"
+                Set pbControlBeginGroup to True
+                Procedure OnExecute Variant vCommandBarControl
+                    Runprogram Shell Background "https://ko-fi.com/nilss"
+                End_Procedure
+            End_Object
+
+            Object oSuggestion_MenuItem is a cCJMenuItem
+                Set psTooltip to "Suggest"
+                Set psDescription to "Suggest a feature, or report a bug..."
+                Set psImage to "Suggestion.ico"
+                Set pbControlBeginGroup to True
+
+                Procedure OnExecute Variant vCommandBarControl
+                    Runprogram Shell Background "https://github.com/NilsSve/DataFolderSelectorDemo/issues/1"
+                End_Procedure
+
+            End_Object
+
             Object oHelpMenuItem is a cCJHelpMenuItem
                 Set peControlType to xtpControlSplitButtonPopup
                 Set psCaption to C_$CaptionHelp
@@ -596,9 +511,6 @@ Procedure OnStartup
 End_Procedure
 Send OnStartup
 
-// If you get a compile error about a resource. "..\APPSRC\COMPILEHEADER.H", 
-// you need to compile the program "WriteDateTimeHeaderFile.src" first!
-//
 // If you get a compile error: "Can't include resource ..\HELP\ABOUT.RTF",
 // you need to create a "About.rtf" file in the Help folder.
 // Note that it can be empty, but it needs to exist for the About dialog.
