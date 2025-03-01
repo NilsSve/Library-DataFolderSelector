@@ -516,7 +516,7 @@ Object oDFSDataFolderSelector_vw is a cDFSView
         End
     End_Procedure  
     
-    // This needs to be the last piece of code of this dialog:
+    // THIS ACTIVATES THE FOLDER SELECTOR DIALOG WHEN YOUR PROGRAM STARTS!
     Procedure OnStartup
         tDFSDataFolders[] aDataFolders
         Boolean bEditAllowed bExists bShouldPopUp bAutoRestoreOPenFiles bOK bConnIdFileExists
@@ -524,7 +524,6 @@ Object oDFSDataFolderSelector_vw is a cDFSView
         Integer iSize
         Handle hoWS
         
-        // THIS ACTIVATES THIS DIALOG WHEN YOUR PROGRAM STARTS!
         If (pbAutoPopup(ghoDFSFolderSelector) = True) Begin
             Send Cursor_Ready of Cursor_Control
             // This property controls if the Edit button should be available or not:
