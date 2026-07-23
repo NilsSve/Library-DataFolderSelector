@@ -16,11 +16,19 @@ The Data Folder Selector Utility provides a way for users to select the desired 
 - The **DataFolderSelector.dg** includes a property called pbAutoPopup, which is set to True by default. This dialog should be added to your program's Client_Area like any other component. When pbAutoPopup is set to True, the dialog will automatically appear, enabling the user to select the desired Data folder/Company. All relevant data paths will be updated automatically once the OK button is clicked, with tables re-opening and any SQL connections being re-established.
 - An **Order Entry Sample application** is provided alongside several Data folders to help test the concept. After selecting a Data folder with the DataFolderSelector dialog and launching the Order program, you can verify the changes in the About dialog. To do this, click Help -> About -> System Info. The dialog will display information about the selected Data Path, the Filelist.cfg path, and the complete DFPath.
 
-## Setup after cloning
+## Dependencies
 
-After cloning this repository, run **`setup.bat`** once from the repository root. It:
+DataFolderSelector requires **DFAbout**, **RDCToolsLib** and **vwin32fh**. They are **not**
+nested inside this repository — `DataFolderSelector25.0.sws` references them as flat siblings
+(`..\DFAbout`, `..\RDCToolsLib\RDCToolsLibLibrary25.0.sws`, `..\vwin32fh`). When DataFolderSelector
+is consumed as a library inside an application, that application already provides the three in the
+same flat library set, so nothing is duplicated.
 
-- downloads / updates the library submodules under `Libraries\` (DFAbout, RDCToolsLib, vwin32fh) to the versions this workspace expects;
-- configures this clone so a normal `git pull` keeps those libraries in sync automatically from then on.
+## Setup after cloning (standalone development only)
 
-Re-run `setup.bat` any time the `Libraries\` folders look empty or out of date, or when a new submodule is added.
+To work on DataFolderSelector on its own, run **`setup.bat`** once. It clones DFAbout,
+RDCToolsLib and vwin32fh as **siblings** of this folder (the layout the `.sws` expects), and is a
+no-op when they are already present. Then open `DataFolderSelector25.0.sws` and build.
+
+You do not need this step when DataFolderSelector is used as a library by an application — the
+application's own setup provides the sibling libraries.
