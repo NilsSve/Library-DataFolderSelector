@@ -16,19 +16,30 @@ The Data Folder Selector Utility provides a way for users to select the desired 
 - The **DataFolderSelector.dg** includes a property called pbAutoPopup, which is set to True by default. This dialog should be added to your program's Client_Area like any other component. When pbAutoPopup is set to True, the dialog will automatically appear, enabling the user to select the desired Data folder/Company. All relevant data paths will be updated automatically once the OK button is clicked, with tables re-opening and any SQL connections being re-established.
 - An **Order Entry Sample application** is provided alongside several Data folders to help test the concept. After selecting a Data folder with the DataFolderSelector dialog and launching the Order program, you can verify the changes in the About dialog. To do this, click Help -> About -> System Info. The dialog will display information about the selected Data Path, the Filelist.cfg path, and the complete DFPath.
 
+## Two workspace files, named for their role
+
+| File | Role | `[Libraries]` |
+|---|---|---|
+| `DataFolderSelectorLibrary25.0.sws` | A consuming application **references** this | none — deliberately empty |
+| `DataFolderSelectorDev25.0.sws` | Open this to **build** DataFolderSelector itself | the three `..\` siblings |
+
+There is no plain `DataFolderSelector25.0.sws`. Applications reference the empty
+`DataFolderSelectorLibrary` entry and declare the flat library set (DFAbout, RDCToolsLib,
+vwin32fh) in their *own* workspace alongside it, so nothing is reached twice.
+
 ## Dependencies
 
 DataFolderSelector requires **DFAbout**, **RDCToolsLib** and **vwin32fh**. They are **not**
-nested inside this repository — `DataFolderSelector25.0.sws` references them as flat siblings
-(`..\DFAbout`, `..\RDCToolsLib\RDCToolsLibLibrary25.0.sws`, `..\vwin32fh`). When DataFolderSelector
-is consumed as a library inside an application, that application already provides the three in the
-same flat library set, so nothing is duplicated.
+nested inside this repository — `DataFolderSelectorDev25.0.sws` references them as flat siblings
+(`..\DFAbout`, `..\RDCToolsLib\RDCToolsLibLibrary25.0.sws`, `..\vwin32fh`), which resolve to the
+same shared copies the consuming application uses.
 
 ## Setup after cloning (standalone development only)
 
 To work on DataFolderSelector on its own, run **`setup.bat`** once. It clones DFAbout,
-RDCToolsLib and vwin32fh as **siblings** of this folder (the layout the `.sws` expects), and is a
-no-op when they are already present. Then open `DataFolderSelector25.0.sws` and build.
+RDCToolsLib and vwin32fh as **siblings** of this folder (the layout `DataFolderSelectorDev*.sws`
+expects), and is a no-op when they are already present. Then open
+`DataFolderSelectorDev25.0.sws` and build.
 
 You do not need this step when DataFolderSelector is used as a library by an application — the
-application's own setup provides the sibling libraries.
+application's own workspace provides the sibling libraries.

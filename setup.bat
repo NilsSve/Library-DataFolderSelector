@@ -6,7 +6,7 @@ REM  Library-DataFolderSelector - one-time setup for STANDALONE development
 REM
 REM  DataFolderSelector no longer carries DFAbout, RDCToolsLib and vwin32fh as
 REM  nested submodules. They are separate sibling libraries, referenced by
-REM  DataFolderSelector25.0.sws as ..\DFAbout, ..\RDCToolsLib and ..\vwin32fh.
+REM  DataFolderSelectorDev25.0.sws as ..\DFAbout, ..\RDCToolsLib and ..\vwin32fh.
 REM
 REM  This script is only for working on DataFolderSelector on its own - it
 REM  clones those three as siblings of this folder, which is where the .sws
@@ -14,9 +14,12 @@ REM  expects them. When DataFolderSelector is consumed as a library inside
 REM  another workspace, that workspace already provides the three (they sit in
 REM  the same flat library set), and this script is a no-op there.
 REM
-REM  Open DataFolderSelector25.0.sws to build. RDCToolsLibLibrary25.0.sws is
-REM  the (empty) consumer entry point of RDCToolsLib - vwin32fh is supplied
-REM  here as its own sibling, per the flat model.
+REM  Open DataFolderSelectorDev25.0.sws to build. There are two workspace
+REM  files, named for their role: DataFolderSelectorLibrary25.0.sws is the
+REM  (empty) consumer entry that applications reference; DataFolderSelectorDev
+REM  is the one you open to build the library itself. Likewise
+REM  RDCToolsLibLibrary25.0.sws is RDCToolsLib's empty consumer entry - vwin32fh
+REM  is supplied here as its own sibling, per the flat model.
 REM ===========================================================================
 
 cd /d "%~dp0"
@@ -59,7 +62,7 @@ echo.
 echo === Setup complete ===
 echo.
 echo DFAbout, RDCToolsLib and vwin32fh are now siblings of this folder.
-echo Open DataFolderSelector25.0.sws in the Studio and build.
+echo Open DataFolderSelectorDev25.0.sws in the Studio and build.
 echo.
 pause
 exit /b 0

@@ -9,7 +9,3 @@ Is$Win64=False
 DefaultFormHeight=12
 [Projects]
 Project0=SetupDataFolders.src
-[Libraries]
-Lib1=..\DFAbout\DFAbout25.0.sws
-Lib2=..\RDCToolsLib\RDCToolsLibLibrary25.0.sws
-Lib3=..\vwin32fh\StudioLibrary\vWin32fh-Library-DF25.0.sws
