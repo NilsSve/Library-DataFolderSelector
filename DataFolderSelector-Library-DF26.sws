@@ -1,0 +1,16 @@
+{
+    "description": "Lets a user pick which Data folder (client company) a program starts against.",
+    "df": 26.0,
+    "package": {
+        "df-min": 26.0,
+        "icon": "RDC-Mark.svg",
+        "version": "1.0.0"
+    },
+    "projects": [
+        "SetupDataFolders.src"
+    ],
+    "studio": {
+        "DefaultFormHeight": 12
+    },
+    "workspaceName": "DataFolderSelector"
+}
