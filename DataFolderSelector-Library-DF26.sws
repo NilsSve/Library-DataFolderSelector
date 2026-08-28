@@ -4,6 +4,7 @@
     "package": {
         "df-min": 26.0,
         "icon": "RDC-Mark.svg",
+        "license": "MIT",
         "version": "1.0.0"
     },
     "projects": [
