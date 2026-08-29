@@ -68,7 +68,11 @@ Object _oBase64Functions is a cObject
         String sResult
         Integer iVoid
         Move (Base64Encode(AddressOf(sValue), Length(sValue))) to pBase64
+#IF (!@ > 191)
+        Move (PointerToString(pBase64)) to sResult
+#ELSE
         Move pBase64 to sResult
+#ENDIF
         Move (Free(pBase64)) to iVoid
         Function_Return sResult
 #ELSE

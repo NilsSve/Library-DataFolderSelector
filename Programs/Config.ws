@@ -1,12 +1,12 @@
 [Workspace]
 Home=..\
-AppSrcPath=.\AppSrc
-AppHTMLPath=.\AppHtml
-BitmapPath=.\Bitmaps
-IdeSrcPath=.\IdeSrc
-DataPath=.\Data
-DDSrcPath=.\DdSrc
-Description = Data Folder Selector - Order Entry Example
-HelpPath=.\Help
-ProgramPath=.\Programs
-FileList=.\Data\Filelist.cfg
+AppSrcPath=AppSrc
+AppHTMLPath=.
+BitmapPath=Bitmaps
+IdeSrcPath=IDESrc
+DataPath=.
+DDSrcPath=DDSrc
+Description=Lets a user pick which Data folder (client company) a program starts against.
+HelpPath=Help
+ProgramPath=Programs
+FileList=
