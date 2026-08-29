@@ -565,7 +565,15 @@ Class An_FolderBrowseFolderTree is a TreeView
             Get ItemFullPath hItem to sCurrentFolder
             Get YesNo_Box (CS_DFSDeleteFolder - ":" * String(sCurrentFolder) - "?") C_$Confirm MB_DEFBUTTON2 to eResponse
             If (eResponse = MBR_Yes) Begin
+#IF (!@ < 260)
                 Get isTrapped of (trappedErrors(Error_Object_Id)) DFERR_RAWFILE_ERROR to bWasTrapped
+#ELSE
+                // The trapped-errors array left with DataFlex 26 (E 4328 on trappedErrors). Errors
+                // report by default, so "it was trapped" is the safe answer: after the operation
+                // the Trap_Error below restores normal reporting rather than leaving
+                // DFERR_RAWFILE_ERROR silently ignored for the rest of the session.
+                Move True to bWasTrapped
+#ENDIF
                 Send Ignore_Error to Error_Object_Id DFERR_RAWFILE_ERROR
                 Move False to Err
                 Remove_Directory sCurrentFolder
