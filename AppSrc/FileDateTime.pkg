@@ -1,4 +1,9 @@
 ﻿// 2019-12-18 NS. Converted for DF Next Gen (DF 20) to handle Unicode file names.
+// 2026-11-06 NS. DF 20+: FileDateTime reads every file through the wide find-data struct. FindNextFileW was
+//                handed the ANSI tWin32FindData (318 bytes) and wrote 592, 274 bytes past its end, for every
+//                file after the first; and the first file's name was read as UTF-16 where it was UTF-8.
+//                The created and last-accessed times are now the file's own (both were the created time,
+//                and the created time went into dtLastWrite).
 //
 Use tWinStructs.pkg
 Use Winkern.pkg
@@ -145,50 +150,49 @@ Function ConvertDateTimeToSystemDateTime_FDT Global UInteger dwLowDateTime UInte
 End_Function
 
 // 2019-12-18 NS. Converted for DF Next Gen (DF 20) to handle Unicode file names.
+// From DF 20 sFilePath is a UTF-8 string, like every DataFlex string, and the file names come back as UTF-8.
 Function FileDateTime Global String sFilePath Returns tFileDateTime_FDT[]
     Handle hFindFile
-    Integer iVoid iRetval iFile iSizeOfStructWithoutStrings
+    Integer iVoid iRetval iFile
     #IF (!@ < 200)
         tWin32FindData Win32_Find_Data
     #ELSE
-        tWin32FindData Win32_Find_Data
-        WString wFileName wPath  
-        String sFileName
-        Pointer pWin32FindData
+        // FindFirstFile and FindNextFile are the W functions here, so the struct is the W one, 592 bytes,
+        // with the name in UTF-16. The name is read at its offset from the struct's start, the way
+        // DataFlex's own winFindFirstFile does.
+        tWin32FindDataW Win32_Find_Data
+        WString wFileName wPath
+        Integer iNameOffset
     #ENDIF
     tFileDateTime_FDT[] aFileDateTime
     tWinFileTime FileTime_Create FileTime_LastAccess FileTime_LastWrite
-    
+
     #IF (!@ < 200)
         Move (FindFirstFile(AddressOf(sFilePath), AddressOf(Win32_Find_Data))) to hFindFile
     #ELSE
-        Move (AddressOf(Win32_Find_Data)) to pWin32FindData
+        Move (SizeOfType(tWin32FindDataW) - (MAX_PATH * 2) - (MAX_ALTPATH * 2)) to iNameOffset
         Move sFilePath to wPath
-        Move (winFindFirstFile(wPath, pWin32FindData)) to hFindFile
+        Move (FindFirstFile(AddressOf(wPath), AddressOf(Win32_Find_Data))) to hFindFile
     #ENDIF
     If (hFindFile <> INVALID_HANDLE_VALUE) Begin
-        Repeat                                    
+        Repeat
             #IF (!@ < 200)
                 Move (AddressOf(Win32_Find_Data.cFileName)) to aFileDateTime[iFile].sFileName
             #ELSE
-                Move (PointerToWString(AddressOf(Win32_Find_Data.cFileName))) to wFileName
-                Move (CString(wFileName)) to aFileDateTime[iFile].sFileName   
+                Move (PointerToWString(AddressOf(Win32_Find_Data) + iNameOffset)) to wFileName
+                Move (CString(wFileName)) to aFileDateTime[iFile].sFileName
             #ENDIF
-           
-            Move Win32_Find_Data.dwFileAttributes to aFileDateTime[iFile].iAttributes   
+
+            Move Win32_Find_Data.dwFileAttributes to aFileDateTime[iFile].iAttributes
             Move Win32_Find_Data.ftCreationTime   to FileTime_Create
-            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastWrite
-            Move Win32_Find_Data.ftCreationTime   to FileTime_LastAccess
-            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_Create.dwLowDateTime,    FileTime_Create.dwHighDateTime))    to aFileDateTime[iFile].dtLastAccessed
+            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_Create.dwLowDateTime,     FileTime_Create.dwHighDateTime))     to aFileDateTime[iFile].dtCreated
+            Move Win32_Find_Data.ftLastAccessTime to FileTime_LastAccess
+            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_LastAccess.dwLowDateTime, FileTime_LastAccess.dwHighDateTime)) to aFileDateTime[iFile].dtLastAccessed
             Move Win32_Find_Data.ftLastWriteTime  to FileTime_LastWrite
-            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_LastWrite.dwLowDateTime, FileTime_LastWrite.dwHighDateTime)) to aFileDateTime[iFile].dtLastWrite
+            Move (ConvertDateTimeToSystemDateTime_FDT (FileTime_LastWrite.dwLowDateTime,  FileTime_LastWrite.dwHighDateTime))  to aFileDateTime[iFile].dtLastWrite
             Increment iFile
 
-            #IF (!@ < 200)
-                Move (FindNextFile(hFindFile, AddressOf(Win32_Find_Data))) to iRetval
-            #ELSE
-                Move (winFindNextFileW(hFindFile, pWin32FindData)) to iRetval
-            #ENDIF
+            Move (FindNextFile(hFindFile, AddressOf(Win32_Find_Data))) to iRetval
             // If iRetval = false the function call failed but GetLastError fails to tell us if
             // this was because we do not find any files anymore.
         Until (not(iRetval))
