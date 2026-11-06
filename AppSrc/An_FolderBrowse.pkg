@@ -34,14 +34,15 @@ Use FileDateTime.pkg
 Use cDataFolderLanguageConstants.inc
 
 #IFNDEF GET_PathIsDirectory
- External_Function WinAPI_PathIsDirectory "PathIsDirectoryA" SHLWAPI.DLL Pointer lpszPath Returns Integer
-
  // Verifies that a path is a valid directory.
  //
  // Returns TRUE if the path is a valid directory, or FALSE otherwise.
  //
  // Parameters:
  //      sPath - Address of the path to verify.
+#IF (!@ < 200)
+ External_Function WinAPI_PathIsDirectory "PathIsDirectoryA" SHLWAPI.DLL Pointer lpszPath Returns Integer
+
  Function PathIsDirectory Desktop String sPath Returns Integer
      Boolean bRetVal
 
@@ -50,6 +51,21 @@ Use cDataFolderLanguageConstants.inc
 
      Function_Return bRetVal
  End_Function
+#ELSE
+ // From DataFlex 20 sPath is UTF-8, which PathIsDirectoryA read as ANSI: a folder with a national
+ // character in its name was never found. The W function gets the path as a WString.
+ External_Function WinAPI_PathIsDirectory "PathIsDirectoryW" SHLWAPI.DLL Pointer lpszPath Returns Integer
+
+ Function PathIsDirectory Desktop String sPath Returns Integer
+     Boolean bRetVal
+     WString wPath
+
+     Move sPath to wPath
+     Move (WinAPI_PathIsDirectory (AddressOf (wPath))) to bRetVal
+
+     Function_Return bRetVal
+ End_Function
+#ENDIF
 #ENDIF
 
 #IFNDEF umPromptRelational
@@ -464,7 +480,8 @@ Class An_FolderBrowseFolderTree is a TreeView
         End
 //        Move (FileDateTime(ToAnsi (sPath))) to FileInfo
 #ELSE
-        Move (FileDateTime(Utf8ToAnsi (sPath))) to FileInfo
+        // FileDateTime takes the UTF-8 path as it is: it calls the W functions.
+        Move (FileDateTime(sPath)) to FileInfo
 #ENDIF
         Move (SizeOfArray(FileInfo)) to iElements
         Decrement iElements
@@ -492,7 +509,8 @@ Class An_FolderBrowseFolderTree is a TreeView
 #IF (!@ < 200)
         Move (FileDateTime(ToAnsi(sPath - sDirSep - sMask))) to FileInfo
 #ELSE
-        Move (FileDateTime(Utf8ToAnsi(sPath - sDirSep - sMask))) to FileInfo
+        // FileDateTime takes the UTF-8 path as it is: it calls the W functions.
+        Move (FileDateTime(sPath - sDirSep - sMask)) to FileInfo
 #ENDIF
         Move (SizeOfArray(FileInfo))                         to iElements
         Decrement iElements
@@ -505,7 +523,8 @@ Class An_FolderBrowseFolderTree is a TreeView
 #IF (!@ < 200)
                 Get AddTreeItem (ToOem (FileInfo[iElement].sFileName)) hRootItem C_FOLDERITEM 0 0 to hItem
 #ELSE
-                Get AddTreeItem (Utf8ToOem (FileInfo[iElement].sFileName)) hRootItem C_FOLDERITEM 0 0 to hItem
+                // The tree shows UTF-8, like every DataFlex 20 control, and ItemFullPath gives it back as it is.
+                Get AddTreeItem (FileInfo[iElement].sFileName) hRootItem C_FOLDERITEM 0 0 to hItem
 #ENDIF
                 Get HasSubFolders (sPath - sDirSep - FileInfo[iElement].sFileName - sDirSep - sMask) to bContainsFolders
                 If (bContainsFolders) Set ItemChildCount hItem to 1
@@ -605,9 +624,9 @@ Class An_FolderBrowseFolderTree is a TreeView
         // Make it properly handle extended characters, aka "Ž™†„”".
 #IF (!@ < 200)
         Move (ToANSI(sItemFullPath)) to sItemFullPath
-#ELSE
-        Move (Utf8ToAnsi(sItemFullPath)) to sItemFullPath
 #ENDIF
+        // From DataFlex 20 the path stays UTF-8: Make_Directory and RenameFile take it as it is, and the
+        // new label the user typed is UTF-8 too.
         If (bWasCanceled) Begin
             Move sItemFullPath to sNewFolder
         End
