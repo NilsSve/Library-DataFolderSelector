@@ -75,6 +75,21 @@ External_Function DFS_Createfile "CreateFileA" Kernel32.dll ;
     Returns Integer                 // Returns handle that can be used to access the object
 #ENDIF
 
+// The wide CreateFile, which DFSFileLastWriteTime calls from DataFlex 20 with the address of a WString. The ANSI one
+// above was handed the UTF-8 bytes of a DataFlex 20 string as they are, so a file in a folder with a national letter
+// in its name was not found. A name of its own: the ANSI declaration keeps its name for the programs that call it.
+#IFNDEF get_DFS_CreateFileW
+External_Function DFS_CreateFileW "CreateFileW" Kernel32.dll ;
+    Pointer lpFile ;                // Filename, the address of a WString
+    DWord dwDesAccess ;             // Access mode
+    DWord dwShare ;                 // Share mode
+    Pointer lpSecAtt ;              // SD
+    DWord dwCrDisp ;                // How to create
+    DWord dwFlags ;                 // File attributes
+    Handle hTempFile ;              // Handle to template file
+    Returns Handle
+#ENDIF
+
 #IFNDEF DFS_CloseHandle
 External_Function DFS_CloseHandle "CloseHandle" Kernel32.dll ;
     Handle hObject ;                // Handle to object

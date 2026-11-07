@@ -69,6 +69,18 @@ External_Function GetSystemTime "GetSystemTime" Kernel32.Dll ;
 External_Function GetDateFormat "GetDateFormatA" Kernel32.Dll ;
    DWord LCID DWord dwFlags Pointer lpsSystemTime Pointer lpFormat Pointer lpDateStr Integer cchDate Returns Integer
 
+// The wide twins, which ConvertDateTimeToSystemDateTime_FDT calls from DataFlex 20 with the address of a WString: a
+// time or date in a format with a letter outside ASCII (an AM/PM sign, say) comes back as it is, where the ANSI ones
+// gave bytes a DataFlex 20 string reads wrongly. Names of their own - the ANSI ones keep theirs.
+#IFNDEF get_FDT_GetTimeFormatW
+External_Function FDT_GetTimeFormatW "GetTimeFormatW" Kernel32.Dll ;
+   DWord LCID DWord dwFlags Pointer lpsSystemTime Pointer lpFormat Pointer lpTimeStr Integer cchTime Returns Integer
+#ENDIF
+#IFNDEF get_FDT_GetDateFormatW
+External_Function FDT_GetDateFormatW "GetDateFormatW" Kernel32.Dll ;
+   DWord LCID DWord dwFlags Pointer lpsSystemTime Pointer lpFormat Pointer lpDateStr Integer cchDate Returns Integer
+#ENDIF
+
 #IFNDEF _struct_tWin32FindData
 Define MAX_ALTPATH for 14
 Struct tWin32FindData
@@ -131,17 +143,30 @@ Function ConvertDateTimeToSystemDateTime_FDT Global UInteger dwLowDateTime UInte
     tWinSystemTime SystemTime
     tWinFileTime FileTime
     DateTime dtResult
+#IF (!@ >= 200)
+    WString wFormattedTime wFormattedDate
+#ENDIF
 
     Move dwLowDateTime  to FileTime.dwLowDateTime
     Move dwHighDateTime to FileTime.dwHighDateTime
 
     Move (FileTimeToSystemTime (AddressOf(FileTime), AddressOf(SystemTime))) to iSuccess
     If (iSuccess <> 0) Begin
+#IF (!@ < 200)
         Move (Repeat(Character (0), 255)) to sFormattedTime
         Move (GetTimeFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedTime), 255)) to iDataLength
 
         Move (Repeat(Character(0), 255)) to sFormattedDate
         Move (GetDateFormat(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(sFormattedDate), 255)) to iDataLength
+#ELSE
+        Move (ZeroString(255)) to wFormattedTime
+        Move (FDT_GetTimeFormatW(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(wFormattedTime), 255)) to iDataLength
+        Move (CString(wFormattedTime)) to sFormattedTime
+
+        Move (ZeroString(255)) to wFormattedDate
+        Move (FDT_GetDateFormatW(Locale_User_Default, 0, AddressOf(SystemTime), 0, AddressOf(wFormattedDate), 255)) to iDataLength
+        Move (CString(wFormattedDate)) to sFormattedDate
+#ENDIF
 
         Move (Cstring(sFormattedDate) * Cstring (sFormattedTime)) to dtResult
     End

@@ -13,28 +13,52 @@ Define CI_INVALIDARG_DFS  for |CI$80070057
 #IFNDEF Get_SHGetFolderPath
 External_Function SHGetFolderPath "SHGetFolderPathA" shell32.dll Handle hWnd Integer iFolder Handle hToken DWord dwFlags Address lpszPath Returns Integer
 #ENDIF
+
+// The wide one, which WindowsFolderPath calls from DataFlex 20 with the address of a WString. The ANSI one above gave
+// the folder back as ANSI bytes, and Utf8ToOem then read them as UTF-8 and made OEM text of them - two wrong turns for
+// a DataFlex 20 string, so a folder with a national letter in its path came back garbled. A name of its own: the
+// ANSI declaration keeps its name for the programs that call it.
+#IFNDEF get_DFS_SHGetFolderPathW
+External_Function DFS_SHGetFolderPathW "SHGetFolderPathW" shell32.dll Handle hWnd Integer iFolder Handle hToken DWord dwFlags Pointer lpszPath Returns Integer
+#ENDIF
     
+// Returns the folder of iFolderID (a CSIDL value) as the program's own strings hold text: OEM before DataFlex 20,
+// UTF-8 from DataFlex 20.
 Function WindowsFolderPath Global Integer iFolderID Boolean bCurrentPath Returns String
     String sPath
     Integer iRetval
-    
+#IF (!@ >= 200)
+    WString wPath
+#ENDIF
+
+#IF (!@ < 200)
     Move (ZeroString(MAX_PATH)) to sPath
-    
+
     If (bCurrentPath) Begin
         Move (SHGetFolderPath (0, iFolderId, 0, SHGFP_TYPE_CURRENT_DFS, AddressOf(sPath))) to iRetval
     End
     Else Begin
-        Move (SHGetFolderPath (0, iFolderId, 0, SHGFP_TYPE_DEFAULT_DFS, AddressOf(sPath))) to iRetval 
+        Move (SHGetFolderPath (0, iFolderId, 0, SHGFP_TYPE_DEFAULT_DFS, AddressOf(sPath))) to iRetval
     End
-    
+#ELSE
+    Move (ZeroString(MAX_PATH)) to wPath
+
+    If (bCurrentPath) Begin
+        Move (DFS_SHGetFolderPathW(0, iFolderId, 0, SHGFP_TYPE_CURRENT_DFS, AddressOf(wPath))) to iRetval
+    End
+    Else Begin
+        Move (DFS_SHGetFolderPathW(0, iFolderId, 0, SHGFP_TYPE_DEFAULT_DFS, AddressOf(wPath))) to iRetval
+    End
+#ENDIF
+
     Case Begin
-        Case (iRetval = CI_OK_DFS) 
-            Move (CString (sPath)) to sPath
+        Case (iRetval = CI_OK_DFS)
 #IF (!@ < 200)
+            Move (CString (sPath)) to sPath
             Move (ToOEM (sPath)) to sPath
 #ELSE
-            Move (Utf8ToOem (sPath)) to sPath
-#ENDIF                               
+            Move (CString(wPath)) to sPath
+#ENDIF
             Case Break
         Case (iRetval = CI_INVALIDARG_DFS)
             Error DFERR_PROGRAM "Invalid FolderID passed to the function"

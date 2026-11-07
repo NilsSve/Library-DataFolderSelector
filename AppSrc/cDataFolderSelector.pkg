@@ -479,13 +479,22 @@ Class cDataFolderSelector is a cIniFile
         Handle hFile
         Integer iRetval
         tWinFileTime FileTime FileTimeEmpty
+#IF (!@ >= 200)
+        WString wFilename
+#ENDIF
         //
-        Append sFilename (Character(0)) (Character(0))
         Move (GENERIC_READ ior GENERIC_WRITE) to dwAccess
         Move FILE_SHARE_RANDOM   to dwShared
         Move OPEN_EXISTING       to dwCreate
 
+#IF (!@ < 200)
+        Append sFilename (Character(0)) (Character(0))
         Move (DFS_Createfile(AddressOf(sFilename), dwAccess, dwShared, DFS_FNULL, dwCreate, FILE_ATTRIBUTE_NORMAL, DFS_FNULL)) to hFile
+#ELSE
+        // CreateFileW: every character of the path reaches Windows (see DFS_CreateFileW).
+        Move sFilename to wFilename
+        Move (DFS_CreateFileW(AddressOf(wFilename), dwAccess, dwShared, DFS_FNULL, dwCreate, FILE_ATTRIBUTE_NORMAL, DFS_FNULL)) to hFile
+#ENDIF
         If (hFile = INVALID_HANDLE_VALUE) Begin
             Function_Return FileTimeEmpty
         End
