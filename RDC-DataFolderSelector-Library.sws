@@ -5,7 +5,7 @@
         "df-min": 26.0,
         "icon": "RDC-Mark.svg",
         "license": "MIT",
-        "version": "1.0.1"
+        "version": "1.0.2"
     },
     "projects": [
         "SetupDataFolders.src"
