@@ -1,0 +1,93 @@
+// oFileDateTime-Tests.pkg - FileDateTime.pkg: FileDateTime, a file's name and times from FindFirstFile (the W
+// struct from DataFlex 20 on, the name read at its offset), and HasBOMMarker.
+//
+// HasBOMMarker is checked on two small files this test writes to the Windows temp folder and erases again.
+
+Use DFUnit\Fixturing\Fixture.pkg
+Use FileDateTime.pkg
+Use vWin32fh.pkg                 // vGetTempPath
+
+Object oFileDateTime_Tests is a cTestFixture
+    Set psTestFixtureName to "FileDateTime - file times, and HasBOMMarker"
+
+    // A file in the temp folder holding exactly these bytes.
+    Function WriteTempFile String sName UChar[] ucBytes Returns String
+        String sPath
+        Integer iCh
+
+        Get vGetTempPath to sPath
+        Move (vFolderFormat(sPath) + sName) to sPath
+        Move (Seq_New_Channel()) to iCh
+        Direct_Output channel iCh ("binary: " + sPath)
+        Write channel iCh (UCharArrayToString(ucBytes))
+        Close_Output channel iCh
+        Send Seq_Release_Channel iCh
+        Function_Return sPath
+    End_Function
+
+    // This test program: one file, its own name, written today (it was just built) - or yesterday, past midnight.
+    { Published=True }
+    Procedure Test_FileDateTime_Of_This_Program
+        tFileDateTime_FDT[] aFiles
+        String sFileName sLeaf
+        Date dToday dWritten
+        Integer iDays
+
+        Get GetApplicationFileName of ghoApplication to sFileName
+        Move (FileDateTime(sFileName)) to aFiles
+        Send AssertIAreEqual 1 (SizeOfArray(aFiles)) "One file found."
+        If (SizeOfArray(aFiles) = 1) Begin
+            Move (Right(sFileName, (Length(sFileName) - RightPos("\", sFileName)))) to sLeaf
+            Send AssertSAreEqual (Lowercase(sLeaf)) (Lowercase(aFiles[0].sFileName)) "Its name, without the folder."
+            Sysdate dToday
+            Move aFiles[0].dtLastWrite to dWritten
+            Move (dToday - dWritten) to iDays
+            Send Assert ((iDays >= 0) and (iDays <= 1)) ("Written today; the date read was " + String(dWritten))
+        End
+    End_Procedure
+
+    { Published=True }
+    Procedure Test_FileDateTime_Of_A_Missing_File_Is_Empty
+        tFileDateTime_FDT[] aFiles
+
+        Move (FileDateTime("C:\No Such Folder 7Q\NoSuchFile.txt")) to aFiles
+        Send AssertIAreEqual 0 (SizeOfArray(aFiles)) "Nothing found."
+    End_Procedure
+
+    // EF BB BF, then text.
+    { Published=True }
+    Procedure Test_HasBOMMarker_Finds_The_UTF8_Mark
+        UChar[] ucBytes
+        String sPath
+        Boolean bBOM
+
+        Move 239 to ucBytes[0]
+        Move 187 to ucBytes[1]
+        Move 191 to ucBytes[2]
+        Move 65  to ucBytes[3]
+        Move 13  to ucBytes[4]
+        Move 10  to ucBytes[5]
+        Get WriteTempFile "DFS_UnitTest_BOM.txt" ucBytes to sPath
+        Move (HasBOMMarker(sPath)) to bBOM
+        EraseFile sPath
+        Send Assert bBOM "A file that starts with EF BB BF."
+    End_Procedure
+
+    { Published=True }
+    Procedure Test_HasBOMMarker_Plain_Text_Has_None
+        UChar[] ucBytes
+        String sPath
+        Boolean bBOM
+
+        Move 65 to ucBytes[0]
+        Move 66 to ucBytes[1]
+        Move 67 to ucBytes[2]
+        Move 13 to ucBytes[3]
+        Move 10 to ucBytes[4]
+        Get WriteTempFile "DFS_UnitTest_NoBOM.txt" ucBytes to sPath
+        Move (HasBOMMarker(sPath)) to bBOM
+        EraseFile sPath
+        Send AssertFalse bBOM "ABC."
+    End_Procedure
+
+End_Object

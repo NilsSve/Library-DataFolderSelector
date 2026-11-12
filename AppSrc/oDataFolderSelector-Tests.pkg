@@ -1,0 +1,42 @@
+// oDataFolderSelector-Tests.pkg - the helpers of cDataFolderSelector that need no ini file and no window, and
+// the Base64 coding it uses.
+//
+// The package creates its own object (ghoDFSFolderSelector). Creating it only names the ini file beside the
+// program; nothing here reads or writes it.
+
+Use DFUnit\Fixturing\Fixture.pkg
+Use cDataFolderSelector.pkg
+
+Object oDataFolderSelector_Tests is a cTestFixture
+    Set psTestFixtureName to "cDataFolderSelector - folder names, extensions, passwords"
+
+    { Published=True }
+    Procedure Test_AddFolderDelimiter
+        String sDirSep
+
+        Move (SysConf(SYSCONF_DIR_SEPARATOR)) to sDirSep
+        Send AssertSAreEqual ("C:\Data" + sDirSep) (AddFolderDelimiter(ghoDFSFolderSelector, "C:\Data"))   "One is added."
+        Send AssertSAreEqual "C:\Data\"            (AddFolderDelimiter(ghoDFSFolderSelector, "C:\Data\"))  "One is there already."
+        Send AssertSAreEqual "C:\Data\"            (AddFolderDelimiter(ghoDFSFolderSelector, "  C:\Data  ")) "Spaces round it go."
+    End_Procedure
+
+    // The extension comes back with its dot, and only the last one counts.
+    { Published=True }
+    Procedure Test_DFSGetFileExtension
+        Send AssertSAreEqual ".sws" (DFSGetFileExtension(ghoDFSFolderSelector, "C:\Projects\My.App\My.App.sws")) "A dotted folder and file name."
+        Send AssertSAreEqual ".ws"  (DFSGetFileExtension(ghoDFSFolderSelector, "Config.ws"))                     "No folder."
+    End_Procedure
+
+    // A Data folder's password is kept encrypted in the ini file; decrypting gives it back.
+    { Published=True }
+    Procedure Test_EncryptPassword_And_Back
+        String sEncrypted sDecrypted
+
+        Get EncryptPassword of ghoDFSFolderSelector "Secret 123" to sEncrypted
+        Send AssertSAreNotEqual "Secret 123" sEncrypted "Not kept as it was typed."
+        Send AssertSAreNotEqual "" sEncrypted "Something is kept."
+        Get DecryptPassword of ghoDFSFolderSelector sEncrypted to sDecrypted
+        Send AssertSAreEqual "Secret 123" sDecrypted "Decrypting gives it back."
+    End_Procedure
+
+End_Object

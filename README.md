@@ -43,3 +43,18 @@ expects), and is a no-op when they are already present. Then open
 
 You do not need this step when DataFolderSelector is used as a library by an application — the
 application's own workspace provides the sibling libraries.
+
+## Unit tests
+
+`AppSrc\UnitTests.src` is the unit-test program of the library, built on
+[DFUnit](https://github.com/NilsSve/Library-DFUnit). `setup.bat` clones DFUnit beside this folder
+(`..\DFUnit`) with the other libraries; then open `DataFolderSelectorDev25.0.sws` or
+`DataFolderSelectorDev26.0.sws` and build `UnitTests.src`. `DataFolderSelectorLibrary25.0.sws` and the
+DataFlex 26 package do not know DFUnit.
+
+The tests are in `AppSrc\o<Subject>-Tests.pkg`, one file per subject, and `AppSrc\oUnit_Tests.pkg` lists them.
+The first files cover the helpers of `cDataFolderSelector` that need no ini file (the folder delimiter, the file
+extension, a password encrypted and decrypted) and `FileDateTime.pkg` (a file's name and write date, and
+`HasBOMMarker` on two small files it writes to the temp folder). `Programs\UnitTests64.exe -c` runs them on the
+console (exit code 0 when all passed). The test program does not open `Programs\Config.ws`: it names no
+FileList, as the library has no database.

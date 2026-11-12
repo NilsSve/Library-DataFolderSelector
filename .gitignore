@@ -51,3 +51,10 @@
 **/Install
 **/Capture
 LoginEncryptionKey.inc
+
+# df-cli installs the packages the DataFlex 26 library files name (vwin32fh, for RDCToolsLib) here
+DfPkg/
+*.sws.lock
+# The two setup files the DFUnit package drops into the workspace folder
+/SetupUnitTests.bat
+/SetupUnitTests.ps1

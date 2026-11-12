@@ -1,0 +1,36 @@
+// UnitTests.src - the unit-test program of the DataFolderSelector library.
+//
+// Built in DataFolderSelectorDev25.0.sws and DataFolderSelectorDev26.0.sws, which take DFUnit from the
+// sibling folder ..\DFUnit (setup.bat clones it). DataFolderSelectorLibrary25.0.sws and the DataFlex 26
+// package, which other workspaces use the library through, do not know DFUnit. New tests are added in
+// oUnit_Tests.pkg - nothing here changes.
+//
+// Running it:
+//     UnitTests64.exe                    the test-runner window
+//     UnitTests64.exe -c                 unattended: results on the console, then exit 0 (all passed)
+//                                        or -1 (a test failed)
+//     UnitTests64.exe -c -o result.xml   the same, plus JUnit XML for a build server
+//     UnitTests64.exe -n                 open the window but do not run on startup
+
+Use DFAllEnt.pkg
+Use DFUnit.pkg
+Use cRDCApplication.pkg
+
+Object oApplication is a cRDCApplication
+    Set psCompany to "RDC Tools International"
+    Set psProduct to "DataFolderSelector Unit Tests"
+    // Programs\Config.ws names no FileList - the library has no database - so opening it stops the
+    // program with error 4415. Nothing here needs the workspace.
+    Set psAutoOpenWorkspace to ""
+End_Object
+
+Object oTestApplication is a cDFUnitTestApplication
+
+    // Every test fixture in this workspace hangs off this one file.
+    Use oUnit_Tests.pkg
+
+End_Object
+
+// Parses the command line, then either shows the test-runner window or runs the tests on the console and
+// exits with the appropriate code.
+Send AutoRun of ghoTestApplication

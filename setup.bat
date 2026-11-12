@@ -10,11 +10,13 @@ REM  DataFolderSelectorDev25.0.sws as ..\DFAbout, ..\RDCToolsLib and ..\vwin32fh
 REM
 REM  This script is only for working on DataFolderSelector on its own - it
 REM  clones those three as siblings of this folder, which is where the .sws
-REM  expects them. When DataFolderSelector is consumed as a library inside
+REM  expects them - and DFUnit, the unit-test library, for the test program
+REM  AppSrc\UnitTests.src (the consumer entry does not know DFUnit).
+REM  When DataFolderSelector is consumed as a library inside
 REM  another workspace, that workspace already provides the three (they sit in
 REM  the same flat library set), and this script is a no-op there.
 REM
-REM  Open DataFolderSelectorDev25.0.sws to build. There are two workspace
+REM  Open DataFolderSelectorDev25.0.sws (or 26.0) to build. There are two workspace
 REM  files, named for their role: DataFolderSelectorLibrary25.0.sws is the
 REM  (empty) consumer entry that applications reference; DataFolderSelectorDev
 REM  is the one you open to build the library itself. Likewise
@@ -39,7 +41,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-for %%N in (DFAbout RDCToolsLib vwin32fh) do (
+for %%N in (DFAbout RDCToolsLib vwin32fh DFUnit) do (
     if exist "..\%%N\.git" (
         echo [%%N] already present - pulling latest...
         git -C "..\%%N" pull --ff-only
@@ -61,8 +63,9 @@ for %%N in (DFAbout RDCToolsLib vwin32fh) do (
 echo.
 echo === Setup complete ===
 echo.
-echo DFAbout, RDCToolsLib and vwin32fh are now siblings of this folder.
-echo Open DataFolderSelectorDev25.0.sws in the Studio and build.
+echo DFAbout, RDCToolsLib, vwin32fh and DFUnit are now siblings of this folder.
+echo Open DataFolderSelectorDev25.0.sws (or 26.0) in the Studio and build;
+echo UnitTests.src runs the unit tests of the library.
 echo.
 pause
 exit /b 0
